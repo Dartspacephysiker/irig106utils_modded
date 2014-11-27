@@ -97,8 +97,8 @@ int           m_iI106Handle;
 // Per channel statistics
 typedef struct              _SuChanInfo         // Channel info
 {
-    uint16_t                uChID;
-    BOOL                    bEnabled;           // Flag for channel enabled
+    uint16_t                  uChID;
+    BOOL                      bEnabled;         // Flag for channel enabled
     SuRDataSource           * psuRDataSrc;      // Pointer to the corresponding TMATS RRecord
     void                    * psuAttributes;    // Pointer to the corresponding Attributes (if present)
 } SuChanInfo;
@@ -127,7 +127,6 @@ int main(int argc, char ** argv)
     unsigned int            uChannel;          // Channel number
     int                     bVerbose;
     int                     bPrintTMATS;
-    int                     bDontSwapRawData;
     unsigned long           ulBuffSize = 0L;
 
     EnI106Status            enStatus;
@@ -155,7 +154,6 @@ int main(int argc, char ** argv)
     uChannel         = -1;
     bVerbose         = bFALSE;            /* No verbosity                      */
     bPrintTMATS      = bFALSE;
-    bDontSwapRawData = bFALSE;            /* don't swap the raw input data           */
 
     szInFile[0]  = '\0';
     strcpy(szOutFile,"");                // Default is stdout
@@ -184,11 +182,6 @@ int main(int argc, char ** argv)
                             }
                         sscanf(argv[iArgIdx],"%u",&uChannel);
                         break;
-
-                    case 's' :                   /* Swap bytes */
-                        bDontSwapRawData = 1;
-                        break;
-
 
                     case 'T' :                   /* Print TMATS flag */
                         bPrintTMATS = bTRUE;
@@ -399,25 +392,6 @@ int main(int argc, char ** argv)
                 suAnalogF1Msg.psuAttributes = (SuAnalogF1_Attributes *)apsuChanInfo[suI106Hdr.uChID]->psuAttributes;
  
                 assert(suAnalogF1Msg.psuAttributes != NULL);
-
-                if (bDontSwapRawData)
-                    {
-                    // Add / modify attributes not covered by the TMATS
-                    // Special for Example_1.c10 we need the byte swap
-                    suAnalogF1Msg.psuAttributes->bDontSwapRawData = 1;
-                    //#ifdef TEST_EXT_DEFINITIONS
-                        // Another method to set the attributes
-                        enStatus = Set_Attributes_Ext_AnalogF1(suAnalogF1Msg.psuAttributes->psuRDataSrc, suAnalogF1Msg.psuAttributes,
-                        -1, -1, -1, -1,
-                        -1, -1,
-                        -1, - 1, -1, -1,
-                        -1, -1, -1, 
-                        // External additional data
-                        -1, bDontSwapRawData);
-                    //#endif
-
-                    // End special for Example_1.c10
-                    }
 
                 // Step through all ANALOGF1 messages
                 enStatus = enI106_Decode_FirstAnalogF1(&suI106Hdr, pvBuff, &suAnalogF1Msg);
@@ -709,7 +683,6 @@ void vUsage(void)
     printf("   <filename> Input/output file names        \n");
     printf("   -v         Verbose (unused)               \n");
     printf("   -c ChNum   Channel Number (default all)   \n");
-    printf("   -s         Don't swap raw data            \n");
     printf("   -T         Print TMATS summary and exit   \n");
     printf("                                             \n");
     printf("The output data fields are:                  \n");

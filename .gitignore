@@ -1,0 +1,17 @@
+#executables
+gcc/i106stat
+gcc/i106vid
+gcc/idmp1553
+gcc/idmp429
+gcc/idmpcan
+gcc/idmpeth
+gcc/idmpgps
+gcc/idmpindex
+gcc/idmpins
+gcc/idmppcm
+gcc/idmptime
+gcc/idmptmat
+gcc/idmpuart
+
+#Emacs temp files
+*~
