@@ -305,18 +305,6 @@ int main(int argc, char ** argv)
         return 1;
         }
 
-    if (bPrintTMATS == bTRUE)
-        { 
-        vPrintTmats(&suTmatsInfo, psuOutFile);
-        return(0);
-        }
-
-/*DELETEMEDELETEMEDELETEMEDELETEME
- * Looks like we're good up to here, Spence
- */
-
-
-    
     enStatus = enI106_Decode_Tmats(&suI106Hdr, pvBuff, &suTmatsInfo);
     if (enStatus != I106_OK) 
         {
@@ -331,16 +319,20 @@ int main(int argc, char ** argv)
         return 1;
         }
 
-    //Show Channel Attributes, if desired
-    if (bVerbose)
+    //Show Analog Channel Attributes, if desired
+    if (bPrintTMATS == bTRUE)
         {
-	  int iChanIdx = 0;
-	  printf("Feeling verbose...\n");
-	  /* do */
-	  /* { */
-	  /*   enStatus = PrintChanAttributes_ANALOGF1(apsuChanInfo[iChanIdx]); */
-	  /*   iChanIdx++; */
-	  /* } while ( (apsuChanInfo[iChanIdx]->psuAttributes != NULL) && (enStatus == I106_OK) ); */
+	int iChanIdx = 0;
+
+	do
+	    {
+	    enStatus = PrintChanAttributes_ANALOGF1(apsuChanInfo[iChanIdx]);
+	    iChanIdx++;
+	    } while ( iChanIdx < 256 ); //
+	
+	vPrintTmats(&suTmatsInfo, psuOutFile);
+
+        return(0);
 
 	}
 
@@ -354,7 +346,7 @@ int main(int argc, char ** argv)
         // Read the next header
         enStatus = enI106Ch10ReadNextHeader(m_iI106Handle, &suI106Hdr);
 
-        // Setup a one time loop to make it easy to break out on error
+        // Setup a one-time loop to make it easy to break out on error
         do
             {
             if (enStatus == I106_EOF)
@@ -367,7 +359,7 @@ int main(int argc, char ** argv)
             // If IRIG time message then process it
             if (suI106Hdr.ubyDataType == I106CH10_DTYPE_IRIG_TIME)
                 {
-                // Make sure our buffer is big enough, size *does* matter
+                // Make sure our buffer is big enough
                 if (ulBuffSize < suI106Hdr.ulPacketLen)
                     {
                     pvBuff = (unsigned char *)realloc(pvBuff, suI106Hdr.ulPacketLen);
@@ -381,13 +373,12 @@ int main(int argc, char ** argv)
                 }
 
             // If ANALOGF1 message then process it
-	    //This uChannel thing is the channel we set at the command line
             if ((suI106Hdr.ubyDataType == I106CH10_DTYPE_ANALOG) &&
                 ((uChannel == -1) || (uChannel == (int)suI106Hdr.uChID)))
                 {
                 SuAnalogF1_CurrMsg suAnalogF1Msg;
 
-                // Make sure our buffer is big enough, size *does* matter
+                // Make sure our buffer is big enough
                 if (ulBuffSize < suI106Hdr.ulPacketLen)
                     {
                     pvBuff = (unsigned char *)realloc(pvBuff, suI106Hdr.ulPacketLen);
@@ -407,10 +398,6 @@ int main(int argc, char ** argv)
                 suAnalogF1Msg.psuAttributes = (SuAnalogF1_Attributes *)apsuChanInfo[suI106Hdr.uChID]->psuAttributes;
  
                 assert(suAnalogF1Msg.psuAttributes != NULL);
-
-
-		//		printf("Jeg kjenner hvordan gjøre med dater\n");
-
 
                 // Step through all ANALOGF1 messages
                 enStatus = enI106_Decode_FirstAnalogF1(&suI106Hdr, pvBuff, &suAnalogF1Msg);
@@ -449,9 +436,9 @@ int main(int argc, char ** argv)
 
                 } // end if ANALOGF1
 
-            } while (bFALSE); // end one time loop
+            } while (bFALSE); // end one-time loop
 
-        // If EOF break out of main read loop
+        // If EOF, break out of main read loop
         if (enStatus == I106_EOF)
             {
             fprintf(stderr, "End of file\n");
@@ -635,7 +622,6 @@ EnI106Status AssembleAttributesFromTMATS(FILE *psuOutFile, SuTmatsInfo * psuTmat
                     // Fill the attributes, don't check the return status I106_INVALID_PARAMETER
                     enStatus = Set_Attributes_AnalogF1(psuRDataSrc, (SuAnalogF1_Attributes *)apsuChanInfo[iTrackNumber]->psuAttributes);
 
-		    enStatus = PrintChanAttributes_ANALOGF1(apsuChanInfo[iTrackNumber]);
                     }
                 }
 
@@ -694,9 +680,12 @@ int PostProcessFrame_AnalogF1(SuAnalogF1_CurrMsg * psuCurrMsg)
   
 EnI106Status I106_CALL_DECL PrintChanAttributes_ANALOGF1(SuChanInfo * psuChanInfo)
 {
-    if( (psuChanInfo == NULL) || (psuChanInfo->psuRDataSrc == NULL )  || (psuChanInfo->psuAttributes == NULL ) )
+    if (psuChanInfo == NULL)
     {
-        printf("Either RDataSrc or Attributes is NULL\n");
+        return I106_INVALID_PARAMETER; 
+    }
+    if ( (psuChanInfo->psuRDataSrc == NULL)  || (psuChanInfo->psuAttributes == NULL) )
+    {
         return I106_INVALID_PARAMETER; 
     }
 
