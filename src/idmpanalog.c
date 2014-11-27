@@ -110,14 +110,15 @@ typedef struct              _SuChanInfo         // Channel info
 
 void vPrintTmats(SuTmatsInfo * psuTmatsInfo, FILE * psuOutFile);
 EnI106Status AssembleAttributesFromTMATS(FILE *psuOutFile, SuTmatsInfo * psuTmatsInfo, SuChanInfo * apsuChanInfo[], int MaxSuChanInfo);
-int PostProcessFrame_AnalogF1(SuAnalogF1_CurrMsg * psuCurrMsg);
+int PostProcessFrame_AnalogF1(SuAnalogF1_CurrMsg * psuCurrMsg);  
+EnI106Status PrintChanAttributes_ANALOGF1(SuChanInfo * psuChanInfo);
 void vUsage(void);
 
 
 /* ------------------------------------------------------------------------ */
 
 int main(int argc, char ** argv)
-    {
+{
 
     char                    szInFile[256];     // Input file name
     char                    szOutFile[256];    // Output file name
@@ -310,6 +311,12 @@ int main(int argc, char ** argv)
         return(0);
         }
 
+/*DELETEMEDELETEMEDELETEMEDELETEME
+ * Looks like we're good up to here, Spence
+ */
+
+
+    
     enStatus = enI106_Decode_Tmats(&suI106Hdr, pvBuff, &suTmatsInfo);
     if (enStatus != I106_OK) 
         {
@@ -324,6 +331,18 @@ int main(int argc, char ** argv)
         return 1;
         }
 
+    //Show Channel Attributes, if desired
+    if (bVerbose)
+        {
+	  int iChanIdx = 0;
+	  printf("Feeling verbose...\n");
+	  /* do */
+	  /* { */
+	  /*   enStatus = PrintChanAttributes_ANALOGF1(apsuChanInfo[iChanIdx]); */
+	  /*   iChanIdx++; */
+	  /* } while ( (apsuChanInfo[iChanIdx]->psuAttributes != NULL) && (enStatus == I106_OK) ); */
+
+	}
 
 /*
  * Read messages until error or EOF
@@ -384,14 +403,14 @@ int main(int argc, char ** argv)
 
                 assert(apsuChanInfo[suI106Hdr.uChID] != NULL);
 
-/*DELETEMEDELETEMEDELETEMEDELETEME
- * Looks like we're good up to here, Spence
- */
-
                 // Get the attributes
                 suAnalogF1Msg.psuAttributes = (SuAnalogF1_Attributes *)apsuChanInfo[suI106Hdr.uChID]->psuAttributes;
  
                 assert(suAnalogF1Msg.psuAttributes != NULL);
+
+
+		//		printf("Jeg kjenner hvordan gjøre med dater\n");
+
 
                 // Step through all ANALOGF1 messages
                 enStatus = enI106_Decode_FirstAnalogF1(&suI106Hdr, pvBuff, &suAnalogF1Msg);
@@ -402,30 +421,26 @@ int main(int argc, char ** argv)
                     uint32_t  Count;
 
                     /*nParityErrors =*/ PostProcessFrame_AnalogF1(&suAnalogF1Msg); // Applies the word mask, checks for errors
-                    PrintDigits = suAnalogF1Msg.psuAttributes->ulCommonWordLen / 4; // 4 bits: a half byte
-                    Remainder   = suAnalogF1Msg.psuAttributes->ulCommonWordLen % 4;
                     if(Remainder)
                         PrintDigits += 2;
 
                      // Print the channel
-                     fprintf(psuOutFile, "ANALOGIN-%d: ", suI106Hdr.uChID);
+                     fprintf(psuOutFile, "ANAIN-%d: ", suI106Hdr.uChID);
 
-                     // Print out the time
-                     enI106_RelInt2IrigTime(m_iI106Handle, suAnalogF1Msg.llIntPktTime, &suTime);
 //                   szTime = IrigTime2StringF(&suTime, -1);
                      szTime = IrigTime2String(&suTime);
                      fprintf(psuOutFile,"%s ", szTime);
 
                      // Print out the data
-                     for(Count = 0; Count < suAnalogF1Msg.psuAttributes->ulWordsInMinorFrame - 1; Count++)
-                         {
-                        static char cParityError;
-                        cParityError = suAnalogF1Msg.psuAttributes->pauOutBufErr[Count] ? '?' : ' ';
-                        // Note the I64 in the format
-                        fprintf(psuOutFile, "%0*I64X%c", PrintDigits, 
-                             suAnalogF1Msg.psuAttributes->paullOutBuf[Count], cParityError);
-                         }
-                     fprintf(psuOutFile,"\n");
+                     /* for(Count = 0; Count < suAnalogF1Msg.psuAttributes->ulWordsInMinorFrame - 1; Count++) */
+                     /*     { */
+                     /*    static char cParityError; */
+                     /*    cParityError = suAnalogF1Msg.psuAttributes->pauOutBufErr[Count] ? '?' : ' '; */
+                     /*    // Note the I8 in the format */
+                     /*    fprintf(psuOutFile, "%0*I8X%c", PrintDigits,  */
+                     /*         suAnalogF1Msg.psuAttributes->paullOutBuf[Count], cParityError); */
+                     /*     } */
+                     /* fprintf(psuOutFile,"\n"); */
 
                      // Get the next ANALOGF1 message
                     enStatus = enI106_Decode_NextAnalogF1(&suAnalogF1Msg);
@@ -457,14 +472,14 @@ int main(int argc, char ** argv)
     fclose(psuOutFile);
 
     return 0;
-    }
+}
 
 
 
 /* ------------------------------------------------------------------------ */
 /* Note: Most of the code below is from Irig106.org / Bob Baggerman */
 void vPrintTmats(SuTmatsInfo * psuTmatsInfo, FILE * psuOutFile)
-    {
+{
     int                     iGIndex;
     int                     iRIndex;
     int                     iRDsiIndex;
@@ -502,7 +517,7 @@ void vPrintTmats(SuTmatsInfo * psuTmatsInfo, FILE * psuOutFile)
             do  {
                 if (psuRDataSource == NULL) 
                     break;
-                if (strcasecmp(psuRDataSource->szChannelDataType,"ANALOGIN") == 0)
+                if (strcasecmp(psuRDataSource->szChannelDataType,"ANAIN") == 0)
                     {
                     iRDsiIndex = psuRDataSource->iDataSourceNum;
                     fprintf(psuOutFile," %5i ",   psuRDataSource->iTrackNumber);
@@ -520,7 +535,7 @@ void vPrintTmats(SuTmatsInfo * psuTmatsInfo, FILE * psuOutFile)
         } while (bTRUE);
 
     return;
-    }
+}
 
 /* ------------------------------------------------------------------------ */
 
@@ -538,7 +553,7 @@ void FreeChanInfoTable(SuChanInfo * apsuChanInfo[], int MaxSuChanInfo)
             if(apsuChanInfo[iTrackNumber]->psuAttributes != NULL)
                 {
                 // Analog special
-                if (strcasecmp(apsuChanInfo[iTrackNumber]->psuRDataSrc->szChannelDataType,"ANALOGIN") == 0)
+                if (strcasecmp(apsuChanInfo[iTrackNumber]->psuRDataSrc->szChannelDataType,"ANAIN") == 0)
                     FreeOutputBuffers_AnalogF1((SuAnalogF1_Attributes *) apsuChanInfo[iTrackNumber]->psuAttributes);
                 free(apsuChanInfo[iTrackNumber]->psuAttributes);
                 apsuChanInfo[iTrackNumber]->psuAttributes = NULL;
@@ -554,7 +569,7 @@ void FreeChanInfoTable(SuChanInfo * apsuChanInfo[], int MaxSuChanInfo)
 /* ------------------------------------------------------------------------ */
 
 EnI106Status AssembleAttributesFromTMATS(FILE *psuOutFile, SuTmatsInfo * psuTmatsInfo, SuChanInfo * apsuChanInfo[], int MaxSuChanInfo)
-    {
+{
     static char                   * szModuleText = "Assemble Attributes From TMATS";
     char                          szText[_MAX_PATH + _MAX_PATH];
     int                           SizeOfText = sizeof(szText);
@@ -619,6 +634,8 @@ EnI106Status AssembleAttributesFromTMATS(FILE *psuOutFile, SuTmatsInfo * psuTmat
                         }
                     // Fill the attributes, don't check the return status I106_INVALID_PARAMETER
                     enStatus = Set_Attributes_AnalogF1(psuRDataSrc, (SuAnalogF1_Attributes *)apsuChanInfo[iTrackNumber]->psuAttributes);
+
+		    enStatus = PrintChanAttributes_ANALOGF1(apsuChanInfo[iTrackNumber]);
                     }
                 }
 
@@ -632,7 +649,7 @@ EnI106Status AssembleAttributesFromTMATS(FILE *psuOutFile, SuTmatsInfo * psuTmat
         } // end while walking R record linked list
 
     return(I106_OK);
-    }
+}
 
 /* ------------------------------------------------------------------------ */
 
@@ -641,7 +658,7 @@ EnI106Status AssembleAttributesFromTMATS(FILE *psuOutFile, SuTmatsInfo * psuTmat
 // Checks for parity errors, moves to data to the output buffer, applies the word mask
 // Returns the number of parity errors in the minor frame
 int PostProcessFrame_AnalogF1(SuAnalogF1_CurrMsg * psuCurrMsg)
-    {
+{
     SuAnalogF1_Attributes  * psuAttributes;
     uint32_t Count;
 
@@ -652,42 +669,56 @@ int PostProcessFrame_AnalogF1(SuAnalogF1_CurrMsg * psuCurrMsg)
     if(psuAttributes == NULL)
         return(iParityErrors);
 
-    for(Count = 0; Count < psuAttributes->ulWordsInMinorFrame; Count++)
-        {
-        ullDataWord = psuAttributes->paullOutBuf[Count];
-        if(CheckParity_AnalogF1(ullDataWord, psuAttributes->ulCommonWordLen, psuAttributes->ulParityType, psuAttributes->ulParityTransferOrder))
-            {
-            psuAttributes->pauOutBufErr[Count] = 1; // Parity error
-            iParityErrors++;
-            }
-        else
-            psuAttributes->pauOutBufErr[Count] = 0; // No parity error
+    /* for(Count = 0; Count < psuAttributes->ulWordsInMinorFrame; Count++) */
+    /*     { */
+    /*     ullDataWord = psuAttributes->paullOutBuf[Count]; */
+    /*     if(CheckParity_AnalogF1(ullDataWord, psuAttributes->ulCommonWordLen, psuAttributes->ulParityType, psuAttributes->ulParityTransferOrder)) */
+    /*         { */
+    /*         psuAttributes->pauOutBufErr[Count] = 1; // Parity error */
+    /*         iParityErrors++; */
+    /*         } */
+    /*     else */
+    /*         psuAttributes->pauOutBufErr[Count] = 0; // No parity error */
 
-        // Save the masked word
-        ullDataWord &= psuAttributes->ullCommonWordMask;
-        psuAttributes->paullOutBuf[Count] = ullDataWord;
-        }
+    /*     // Save the masked word */
+    /*     ullDataWord &= psuAttributes->ullCommonWordMask; */
+    /*     psuAttributes->paullOutBuf[Count] = ullDataWord; */
+    /*     } */
 
     return(iParityErrors);
-    }
+}
 
 
 /* ------------------------------------------------------------------------ */
 
-void vUsage(void)
+  
+EnI106Status I106_CALL_DECL PrintChanAttributes_ANALOGF1(SuChanInfo * psuChanInfo)
+{
+    if( (psuChanInfo == NULL) || (psuChanInfo->psuRDataSrc == NULL )  || (psuChanInfo->psuAttributes == NULL ) )
     {
+        printf("Either RDataSrc or Attributes is NULL\n");
+        return I106_INVALID_PARAMETER; 
+    }
+
+    PrintAttributesfromTMATS_ANALOGF1(psuChanInfo->psuRDataSrc, psuChanInfo->psuAttributes);
+
+    return I106_OK;
+}
+  
+void vUsage(void)
+{
     printf("\nIDMPANALOG "MAJOR_VERSION"."MINOR_VERSION" "__DATE__" "__TIME__"\n");
     printf("Dump ANALOGF1 records from a Ch 10 data file\n");
     printf("Freeware Copyright (C) 2010 Irig106.org\n\n");
     printf("Usage: idmpanalog <input file> <output file> [flags]\n");
     printf("   <filename> Input/output file names        \n");
-    printf("   -v         Verbose (unused)               \n");
+    printf("   -v         Verbose                        \n");
     printf("   -c ChNum   Channel Number (default all)   \n");
     printf("   -T         Print TMATS summary and exit   \n");
     printf("                                             \n");
     printf("The output data fields are:                  \n");
     printf("Time  ChanID  Data Data ...                  \n");
-    }
+}
 
 
 #ifdef __cplusplus

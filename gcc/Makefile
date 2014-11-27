@@ -7,7 +7,7 @@ CFLAGS=-iquote../../irig106lib/src -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE 
 LIBS=../../irig106lib/gcc/libirig106.a
 
 #all: i106stat i106trim i106vid idmptmat idmp1553 idmpins idmpuart idmpeth idmp429 idmpindex idmptime idmpgps
-all: i106stat i106vid idmptmat idmp1553 idmpins idmpuart idmpeth idmp429 idmpindex idmptime idmpgps idmpcan idmppcm
+all: i106stat i106vid idmptmat idmp1553 idmpins idmpuart idmpeth idmp429 idmpindex idmptime idmpgps idmpcan idmppcm idmpanalog
 
 i106stat: $(SRC_DIR)/i106stat.c $(LIBS)
 	cc $(CFLAGS) $< $(LIBS) -o $@
@@ -51,5 +51,8 @@ idmpcan: $(SRC_DIR)/idmpcan.c $(LIBS)
 idmppcm: $(SRC_DIR)/idmppcm.c $(LIBS)
 	cc $(CFLAGS) $< $(LIBS) -lm -o $@
 
+idmpanalog: $(SRC_DIR)/idmpanalog.c $(LIBS)
+	cc $(CFLAGS) $< $(LIBS) -lm -o $@
+
 clean:
-	rm i106stat i106vid idmptmat idmp1553 idmpins idmpuart idmpeth idmp429 idmpindex idmptime idmpgps idmpcan idmppcm
+	rm i106stat i106vid idmptmat idmp1553 idmpins idmpuart idmpeth idmp429 idmpindex idmptime idmpgps idmpcan idmppcm idmpanalog
