@@ -45,6 +45,7 @@
 #include <string.h>
 #include <time.h>
 #include <assert.h>
+#include <inttypes.h>
 
 #include "config.h"
 #include "stdint.h"
@@ -112,7 +113,7 @@ typedef struct              _SuChanInfo         // Channel info
 void vPrintTmats(SuTmatsInfo * psuTmatsInfo, FILE * psuOutFile);
 EnI106Status AssembleAttributesFromTMATS(FILE *psuOutFile, SuTmatsInfo * psuTmatsInfo, SuChanInfo * apsuChanInfo[], int MaxSuChanInfo);
 int PostProcessFrame_AnalogF1(SuAnalogF1_CurrMsg * psuCurrMsg);  
-EnI106Status PrintChanAttributes_ANALOGF1(SuChanInfo * psuChanInfo);
+  EnI106Status PrintChanAttributes_ANALOGF1(SuChanInfo * psuChanInfo, FILE * psuOutFile);
 void vUsage(void);
 
 
@@ -327,7 +328,7 @@ int main(int argc, char ** argv)
 
 	do
 	{
-	    enStatus = PrintChanAttributes_ANALOGF1(apsuChanInfo[iChanIdx]);
+	    enStatus = PrintChanAttributes_ANALOGF1(apsuChanInfo[iChanIdx], psuOutFile);
 	    iChanIdx++;
         } while ( iChanIdx < 256 ); //
 	
@@ -342,10 +343,13 @@ int main(int argc, char ** argv)
 /*
  * Read messages until error or EOF
  */
-
+    int32_t nMessages = 0;
+    int32_t nAnalogMessages = 0;
     while (1==1) 
     {
-
+        nMessages++;
+        printf("nMessages is %i\n", nMessages);
+      
         // Read the next header
         enStatus = enI106Ch10ReadNextHeader(m_iI106Handle, &suI106Hdr);
 
@@ -379,6 +383,10 @@ int main(int argc, char ** argv)
             if ((suI106Hdr.ubyDataType == I106CH10_DTYPE_ANALOG) &&
                 ((uChannel == -1) || (uChannel == (int)suI106Hdr.uChID)))
             {
+	        nAnalogMessages++;
+		printf("nAnalogMessages is %" PRIi32 "\n",nAnalogMessages);
+		printf("Header datalen is %" PRIu32 "\n",suI106Hdr.ulDataLen);
+
                 SuAnalogF1_CurrMsg suAnalogF1Msg;
 
                 // Make sure our buffer is big enough
@@ -411,7 +419,7 @@ int main(int argc, char ** argv)
 		}
 		else
 		{
-
+		  enStatus = enI106_Decode_FirstAnalogF1(&suI106Hdr, pvBuff, &suAnalogF1Msg, apsuChanInfo[suI106Hdr.uChID]->bFirst);
 		}
                 while (enStatus == I106_OK)
                 {
@@ -642,7 +650,7 @@ EnI106Status AssembleAttributesFromTMATS(FILE *psuOutFile, SuTmatsInfo * psuTmat
 
 /* ------------------------------------------------------------------------ */
 
-EnI106Status I106_CALL_DECL PrintChanAttributes_ANALOGF1(SuChanInfo * psuChanInfo)
+  EnI106Status I106_CALL_DECL PrintChanAttributes_ANALOGF1(SuChanInfo * psuChanInfo, FILE * psuOutFile)
 {
     if (psuChanInfo == NULL)
     {
@@ -653,7 +661,7 @@ EnI106Status I106_CALL_DECL PrintChanAttributes_ANALOGF1(SuChanInfo * psuChanInf
         return I106_INVALID_PARAMETER; 
     }
 
-    PrintAttributesfromTMATS_AnalogF1(psuChanInfo->psuRDataSrc, psuChanInfo->psuAttributes);
+    PrintAttributesfromTMATS_AnalogF1(psuChanInfo->psuRDataSrc, psuChanInfo->psuAttributes, psuOutFile);
 
     return I106_OK;
 }
