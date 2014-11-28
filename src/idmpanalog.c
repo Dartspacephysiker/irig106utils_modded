@@ -101,6 +101,7 @@ typedef struct              _SuChanInfo         // Channel info
     BOOL                      bEnabled;         // Flag for channel enabled
     SuRDataSource           * psuRDataSrc;      // Pointer to the corresponding TMATS RRecord
     void                    * psuAttributes;    // Pointer to the corresponding Attributes (if present)
+    BOOL                      bFirst;
 } SuChanInfo;
 
 /*
@@ -147,10 +148,10 @@ int main(int argc, char ** argv)
  */
 
     if (argc < 2) 
-        {
+    {
         vUsage();
         return 1;
-        }
+    }
 
     uChannel         = -1;
     bVerbose         = bFALSE;            /* No verbosity                      */
@@ -163,10 +164,10 @@ int main(int argc, char ** argv)
     memset(apsuChanInfo, 0, sizeof(apsuChanInfo));
 
     for (iArgIdx=1; iArgIdx<argc; iArgIdx++) 
-        {
+    {
 
         switch (argv[iArgIdx][0]) 
-            {
+        {
             case '-' :
                 switch (argv[iArgIdx][1]) 
                     {
@@ -198,14 +199,14 @@ int main(int argc, char ** argv)
                 else                     strcpy(szOutFile,argv[iArgIdx]);
                 break;
 
-            } /* end command line arg switch */
-        } /* end for all arguments */
+        } /* end command line arg switch */
+    } /* end for all arguments */
 
     if (strlen(szInFile)==0) 
-        {
+    {
         vUsage();
         return 1;
-        }
+    }
 
 /*
  * Opening banner
@@ -225,7 +226,7 @@ int main(int argc, char ** argv)
     enStatus = enI106Ch10Open(&m_iI106Handle, szInFile, I106_READ);
 
     switch (enStatus)
-        {
+    {
         case I106_OPEN_WARNING :
             fprintf(stderr, "Warning opening data file : Status = %d\n", enStatus);
             break;
@@ -235,14 +236,14 @@ int main(int argc, char ** argv)
             fprintf(stderr, "Error opening data file : Status = %d\n", enStatus);
             return 1;
             break;
-        }
+    }
 
     enStatus = enI106_SyncTime(m_iI106Handle, bFALSE, 0);
     if (enStatus != I106_OK)
-        {
+    {
         fprintf(stderr, "Error establishing time sync : Status = %d\n", enStatus);
         return 1;
-        }
+    }
 
 
 /*
@@ -251,22 +252,22 @@ int main(int argc, char ** argv)
 
     // If output file specified then open it    
     if (strlen(szOutFile) != 0)
-        {
+    {
         psuOutFile = fopen(szOutFile,"w");
         if (psuOutFile == NULL) 
-            {
+        {
             fprintf(stderr, "Error opening output file\n");
             return 1;
-            }
+        }
         
        fprintf(psuOutFile, "Input file: %s\n", szInFile);
-       }
+    }
 
     // No output file name so use stdout
     else
-        {
+    {
         psuOutFile = stdout;
-        }
+    }
 
 /*
  * Read the first header. If TMATS flag set, print TMATS and exit
@@ -278,7 +279,7 @@ int main(int argc, char ** argv)
         return 1;
 
     if (suI106Hdr.ubyDataType == I106CH10_DTYPE_TMATS)
-        {
+    {
         // Make a data buffer for TMATS
         pvBuff = (unsigned char *)malloc(suI106Hdr.ulPacketLen);
 
@@ -291,26 +292,26 @@ int main(int argc, char ** argv)
         memset( &suTmatsInfo, 0, sizeof(suTmatsInfo) );
         enStatus = enI106_Decode_Tmats(&suI106Hdr, pvBuff, &suTmatsInfo);
         if (enStatus != I106_OK) 
-            {
+        {
             fprintf(stderr, " Error processing TMATS record : Status = %d\n", enStatus);
             return 1;
-            }
+        }
 
-        } // end if TMATS
+    } // end if TMATS
 
     // TMATS not first message
     else
-        {
+    {
         printf("Error - TMATS message not found\n");
         return 1;
-        }
+    }
 
     enStatus = enI106_Decode_Tmats(&suI106Hdr, pvBuff, &suTmatsInfo);
     if (enStatus != I106_OK) 
-        {
+    {
         fprintf(stderr, " Error processing TMATS record : Status = %d\n", enStatus);
         return 1;
-        }
+    }
 
     enStatus = AssembleAttributesFromTMATS(psuOutFile, &suTmatsInfo, apsuChanInfo, MAX_SUCHANINFO);
     if (enStatus != I106_OK) 
@@ -321,34 +322,36 @@ int main(int argc, char ** argv)
 
     //Show Analog Channel Attributes, if desired
     if (bPrintTMATS == bTRUE)
-        {
+    {
 	int iChanIdx = 0;
 
 	do
-	    {
+	{
 	    enStatus = PrintChanAttributes_ANALOGF1(apsuChanInfo[iChanIdx]);
 	    iChanIdx++;
-	    } while ( iChanIdx < 256 ); //
+        } while ( iChanIdx < 256 ); //
 	
 	vPrintTmats(&suTmatsInfo, psuOutFile);
 
         return(0);
 
-	}
+    }
+
+    
 
 /*
  * Read messages until error or EOF
  */
 
     while (1==1) 
-        {
+    {
 
         // Read the next header
         enStatus = enI106Ch10ReadNextHeader(m_iI106Handle, &suI106Hdr);
 
         // Setup a one-time loop to make it easy to break out on error
         do
-            {
+        {
             if (enStatus == I106_EOF)
                 break;
 
@@ -358,32 +361,32 @@ int main(int argc, char ** argv)
 
             // If IRIG time message then process it
             if (suI106Hdr.ubyDataType == I106CH10_DTYPE_IRIG_TIME)
-                {
+            {
                 // Make sure our buffer is big enough
                 if (ulBuffSize < suI106Hdr.ulPacketLen)
-                    {
+                {
                     pvBuff = (unsigned char *)realloc(pvBuff, suI106Hdr.ulPacketLen);
                     ulBuffSize = suI106Hdr.ulPacketLen;
-                    }
+                }
 
                 // Read the data buffer and decode time
                 enStatus = enI106Ch10ReadData(m_iI106Handle, ulBuffSize, pvBuff);
                 enI106_Decode_TimeF1(&suI106Hdr, pvBuff, &suTime);
                 enI106_SetRelTime(m_iI106Handle, &suTime, suI106Hdr.aubyRefTime);
-                }
+	    }
 
             // If ANALOGF1 message then process it
             if ((suI106Hdr.ubyDataType == I106CH10_DTYPE_ANALOG) &&
                 ((uChannel == -1) || (uChannel == (int)suI106Hdr.uChID)))
-                {
+            {
                 SuAnalogF1_CurrMsg suAnalogF1Msg;
 
                 // Make sure our buffer is big enough
                 if (ulBuffSize < suI106Hdr.ulPacketLen)
-                    {
+                {
                     pvBuff = (unsigned char *)realloc(pvBuff, suI106Hdr.ulPacketLen);
                     ulBuffSize = suI106Hdr.ulPacketLen;
-                    }
+		}
 
                 // Read the data buffer
                 enStatus = enI106Ch10ReadData(m_iI106Handle, ulBuffSize, pvBuff);
@@ -400,17 +403,18 @@ int main(int argc, char ** argv)
                 assert(suAnalogF1Msg.psuAttributes != NULL);
 
                 // Step through all ANALOGF1 messages
-                enStatus = enI106_Decode_FirstAnalogF1(&suI106Hdr, pvBuff, &suAnalogF1Msg);
+		
+		if( apsuChanInfo[suI106Hdr.uChID]->bFirst )
+		{
+		  enStatus = enI106_Decode_FirstAnalogF1(&suI106Hdr, pvBuff, &suAnalogF1Msg, apsuChanInfo[suI106Hdr.uChID]->bFirst);
+		  apsuChanInfo[suI106Hdr.uChID]->bFirst = bFALSE;
+		}
+		else
+		{
+
+		}
                 while (enStatus == I106_OK)
-                    {
-                    int       PrintDigits;
-                    int       Remainder;
-                    uint32_t  Count;
-
-                    /*nParityErrors =*/ PostProcessFrame_AnalogF1(&suAnalogF1Msg); // Applies the word mask, checks for errors
-                    if(Remainder)
-                        PrintDigits += 2;
-
+                {
                      // Print the channel
                      fprintf(psuOutFile, "ANAIN-%d: ", suI106Hdr.uChID);
 
@@ -421,8 +425,6 @@ int main(int argc, char ** argv)
                      // Print out the data
                      /* for(Count = 0; Count < suAnalogF1Msg.psuAttributes->ulWordsInMinorFrame - 1; Count++) */
                      /*     { */
-                     /*    static char cParityError; */
-                     /*    cParityError = suAnalogF1Msg.psuAttributes->pauOutBufErr[Count] ? '?' : ' '; */
                      /*    // Note the I8 in the format */
                      /*    fprintf(psuOutFile, "%0*I8X%c", PrintDigits,  */
                      /*         suAnalogF1Msg.psuAttributes->paullOutBuf[Count], cParityError); */
@@ -432,20 +434,20 @@ int main(int argc, char ** argv)
                      // Get the next ANALOGF1 message
                     enStatus = enI106_Decode_NextAnalogF1(&suAnalogF1Msg);
 
-                    } // end while processing ANALOGF1 messages from an IRIG packet
+		} // end while processing ANALOGF1 messages from an IRIG packet
 
-                } // end if ANALOGF1
-
-            } while (bFALSE); // end one-time loop
+	    } // end if ANALOGF1
+	    
+	} while (bFALSE); // end one-time loop
 
         // If EOF, break out of main read loop
         if (enStatus == I106_EOF)
-            {
+        {
             fprintf(stderr, "End of file\n");
             break;
-            }
+        }
 
-        } // End while reading packet headers forever
+    } // End while reading packet headers forever
 
 /*
  * Print out some summaries
@@ -608,6 +610,7 @@ EnI106Status AssembleAttributesFromTMATS(FILE *psuOutFile, SuTmatsInfo * psuTmat
                 apsuChanInfo[iTrackNumber]->uChID = iTrackNumber;
                 apsuChanInfo[iTrackNumber]->bEnabled = psuRDataSrc->bEnabled;
                 apsuChanInfo[iTrackNumber]->psuRDataSrc = psuRDataSrc;
+		apsuChanInfo[iTrackNumber]->bFirst = bTRUE;
 
                 if (strcasecmp(psuRDataSrc->szChannelDataType,"ANAIN") == 0)
                     {
@@ -639,45 +642,6 @@ EnI106Status AssembleAttributesFromTMATS(FILE *psuOutFile, SuTmatsInfo * psuTmat
 
 /* ------------------------------------------------------------------------ */
 
-/////////////////////////////////////////////////////////////////////////////
-// Post Process a Minor Frame
-// Checks for parity errors, moves to data to the output buffer, applies the word mask
-// Returns the number of parity errors in the minor frame
-int PostProcessFrame_AnalogF1(SuAnalogF1_CurrMsg * psuCurrMsg)
-{
-    SuAnalogF1_Attributes  * psuAttributes;
-    uint32_t Count;
-
-    uint64_t ullDataWord;
-    int iParityErrors = 0;
-
-    psuAttributes = psuCurrMsg->psuAttributes;
-    if(psuAttributes == NULL)
-        return(iParityErrors);
-
-    /* for(Count = 0; Count < psuAttributes->ulWordsInMinorFrame; Count++) */
-    /*     { */
-    /*     ullDataWord = psuAttributes->paullOutBuf[Count]; */
-    /*     if(CheckParity_AnalogF1(ullDataWord, psuAttributes->ulCommonWordLen, psuAttributes->ulParityType, psuAttributes->ulParityTransferOrder)) */
-    /*         { */
-    /*         psuAttributes->pauOutBufErr[Count] = 1; // Parity error */
-    /*         iParityErrors++; */
-    /*         } */
-    /*     else */
-    /*         psuAttributes->pauOutBufErr[Count] = 0; // No parity error */
-
-    /*     // Save the masked word */
-    /*     ullDataWord &= psuAttributes->ullCommonWordMask; */
-    /*     psuAttributes->paullOutBuf[Count] = ullDataWord; */
-    /*     } */
-
-    return(iParityErrors);
-}
-
-
-/* ------------------------------------------------------------------------ */
-
-  
 EnI106Status I106_CALL_DECL PrintChanAttributes_ANALOGF1(SuChanInfo * psuChanInfo)
 {
     if (psuChanInfo == NULL)
@@ -689,7 +653,7 @@ EnI106Status I106_CALL_DECL PrintChanAttributes_ANALOGF1(SuChanInfo * psuChanInf
         return I106_INVALID_PARAMETER; 
     }
 
-    PrintAttributesfromTMATS_ANALOGF1(psuChanInfo->psuRDataSrc, psuChanInfo->psuAttributes);
+    PrintAttributesfromTMATS_AnalogF1(psuChanInfo->psuRDataSrc, psuChanInfo->psuAttributes);
 
     return I106_OK;
 }
