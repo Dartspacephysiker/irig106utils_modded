@@ -112,8 +112,7 @@ typedef struct              _SuChanInfo         // Channel info
 
 void vPrintTmats(SuTmatsInfo * psuTmatsInfo, FILE * psuOutFile);
 EnI106Status AssembleAttributesFromTMATS(FILE *psuOutFile, SuTmatsInfo * psuTmatsInfo, SuChanInfo * apsuChanInfo[], int MaxSuChanInfo);
-int PostProcessFrame_AnalogF1(SuAnalogF1_CurrMsg * psuCurrMsg);  
-  EnI106Status PrintChanAttributes_ANALOGF1(SuChanInfo * psuChanInfo, FILE * psuOutFile);
+EnI106Status PrintChanAttributes_ANALOGF1(SuChanInfo * psuChanInfo, FILE * psuOutFile);
 void vUsage(void);
 
 
@@ -414,12 +413,14 @@ int main(int argc, char ** argv)
 		
 		if( apsuChanInfo[suI106Hdr.uChID]->bFirst )
 		{
-		  enStatus = enI106_Decode_FirstAnalogF1(&suI106Hdr, pvBuff, &suAnalogF1Msg, apsuChanInfo[suI106Hdr.uChID]->bFirst);
+		  enStatus = enI106_Setup_AnalogF1(&suI106Hdr, pvBuff, &suAnalogF1Msg);
+
+		  enStatus = enI106_Decode_FirstAnalogF1(&suI106Hdr, pvBuff, &suAnalogF1Msg);
 		  apsuChanInfo[suI106Hdr.uChID]->bFirst = bFALSE;
 		}
 		else
 		{
-		  enStatus = enI106_Decode_FirstAnalogF1(&suI106Hdr, pvBuff, &suAnalogF1Msg, apsuChanInfo[suI106Hdr.uChID]->bFirst);
+		  enStatus = enI106_Decode_FirstAnalogF1(&suI106Hdr, pvBuff, &suAnalogF1Msg);
 		}
                 while (enStatus == I106_OK)
                 {
@@ -430,17 +431,8 @@ int main(int argc, char ** argv)
                      szTime = IrigTime2String(&suTime);
                      fprintf(psuOutFile,"%s ", szTime);
 
-                     // Print out the data
-                     /* for(Count = 0; Count < suAnalogF1Msg.psuAttributes->ulWordsInMinorFrame - 1; Count++) */
-                     /*     { */
-                     /*    // Note the I8 in the format */
-                     /*    fprintf(psuOutFile, "%0*I8X%c", PrintDigits,  */
-                     /*         suAnalogF1Msg.psuAttributes->paullOutBuf[Count], cParityError); */
-                     /*     } */
-                     /* fprintf(psuOutFile,"\n"); */
-
                      // Get the next ANALOGF1 message
-                    enStatus = enI106_Decode_NextAnalogF1(&suAnalogF1Msg);
+                     enStatus = enI106_Decode_NextAnalogF1(&suAnalogF1Msg);
 
 		} // end while processing ANALOGF1 messages from an IRIG packet
 
@@ -537,7 +529,7 @@ void vPrintTmats(SuTmatsInfo * psuTmatsInfo, FILE * psuOutFile)
 /* ------------------------------------------------------------------------ */
 
 void FreeChanInfoTable(SuChanInfo * apsuChanInfo[], int MaxSuChanInfo)
-    {
+{
     int iTrackNumber;
 
     if(apsuChanInfo == NULL)
@@ -560,7 +552,7 @@ void FreeChanInfoTable(SuChanInfo * apsuChanInfo[], int MaxSuChanInfo)
             apsuChanInfo[iTrackNumber] = NULL;
             } // end if channel info not null
         } // end for all track numbers
-    } // End FreeChanInfoTable
+} // End FreeChanInfoTable
 
 
 /* ------------------------------------------------------------------------ */
