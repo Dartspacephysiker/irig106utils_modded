@@ -12,6 +12,23 @@ gcc/idmppcm
 gcc/idmptime
 gcc/idmptmat
 gcc/idmpuart
+gcc/idmpanalog
 
 #Emacs temp files
 *~
+
+#dmp files
+*.dmpstat
+*.dmpvid
+*.dmp1553
+*.dmp429
+*.dmpcan
+*.dmpeth
+*.dmpgps
+*.dmpindex
+*.dmpins
+*.dmppvm
+*.dmptime
+*.dmptmat
+*.dmpuart
+*.dmpanalog
