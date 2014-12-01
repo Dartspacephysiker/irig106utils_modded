@@ -113,6 +113,7 @@ typedef struct              _SuChanInfo         // Channel info
 void vPrintTmats(SuTmatsInfo * psuTmatsInfo, FILE * psuOutFile);
 EnI106Status AssembleAttributesFromTMATS(FILE *psuOutFile, SuTmatsInfo * psuTmatsInfo, SuChanInfo * apsuChanInfo[], int MaxSuChanInfo);
 int PostProcessFrame_PcmF1(SuPcmF1_CurrMsg * psuCurrMsg);
+  EnI106Status I106_CALL_DECL PrintChanAttributes_PcmF1(SuChanInfo * psuChanInfo, FILE * psuOutFile);
 void vUsage(void);
 
 
@@ -313,12 +314,6 @@ int main(int argc, char ** argv)
         return 1;
         }
 
-    if (bPrintTMATS == bTRUE)
-        { 
-        vPrintTmats(&suTmatsInfo, psuOutFile);
-        return(0);
-        }
-
     enStatus = enI106_Decode_Tmats(&suI106Hdr, pvBuff, &suTmatsInfo);
     if (enStatus != I106_OK) 
         {
@@ -333,6 +328,23 @@ int main(int argc, char ** argv)
         return 1;
         }
 
+    if (bPrintTMATS == bTRUE)
+        { 
+
+	int iChanIdx = 0;
+
+	do
+	{
+	  enStatus = PrintChanAttributes_PcmF1(apsuChanInfo[iChanIdx],psuOutFile);
+	    iChanIdx++;
+        } while ( iChanIdx < 256 ); //
+
+        vPrintTmats(&suTmatsInfo, psuOutFile);
+
+        return(0);
+        }
+
+    
 
 /*
  * Read messages until error or EOF
@@ -697,6 +709,24 @@ int PostProcessFrame_PcmF1(SuPcmF1_CurrMsg * psuCurrMsg)
 
 /* ------------------------------------------------------------------------ */
 
+  EnI106Status I106_CALL_DECL PrintChanAttributes_PcmF1(SuChanInfo * psuChanInfo, FILE * psuOutFile )
+{
+    if (psuChanInfo == NULL)
+    {
+        return I106_INVALID_PARAMETER; 
+    }
+    if ( (psuChanInfo->psuRDataSrc == NULL)  || (psuChanInfo->psuAttributes == NULL) || (psuOutFile == NULL) )
+    {
+        return I106_INVALID_PARAMETER; 
+    }
+
+    PrintAttributesfromTMATS_PcmF1(psuChanInfo->psuRDataSrc, psuChanInfo->psuAttributes, psuOutFile);
+
+    return I106_OK;
+}
+  
+/* ------------------------------------------------------------------------ */
+
 void vUsage(void)
     {
     printf("\nIDMPPCM "MAJOR_VERSION"."MINOR_VERSION" "__DATE__" "__TIME__"\n");
@@ -704,7 +734,7 @@ void vUsage(void)
     printf("Freeware Copyright (C) 2010 Irig106.org\n\n");
     printf("Usage: idmppcm <input file> <output file> [flags]\n");
     printf("   <filename> Input/output file names        \n");
-    printf("   -v         Verbose (unused)               \n");
+    printf("   -v         Verbose                        \n");
     printf("   -c ChNum   Channel Number (default all)   \n");
     printf("   -s         Don't swap raw data            \n");
     printf("   -T         Print TMATS summary and exit   \n");

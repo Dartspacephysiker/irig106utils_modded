@@ -112,7 +112,7 @@ typedef struct              _SuChanInfo         // Channel info
 
 void vPrintTmats(SuTmatsInfo * psuTmatsInfo, FILE * psuOutFile);
 EnI106Status AssembleAttributesFromTMATS(FILE *psuOutFile, SuTmatsInfo * psuTmatsInfo, SuChanInfo * apsuChanInfo[], int MaxSuChanInfo);
-EnI106Status PrintChanAttributes_ANALOGF1(SuChanInfo * psuChanInfo, FILE * psuOutFile);
+EnI106Status PrintChanAttributes_AnalogF1(SuChanInfo * psuChanInfo, FILE * psuOutFile);
 void vUsage(void);
 
 
@@ -327,7 +327,7 @@ int main(int argc, char ** argv)
 
 	do
 	{
-	    enStatus = PrintChanAttributes_ANALOGF1(apsuChanInfo[iChanIdx], psuOutFile);
+	    enStatus = PrintChanAttributes_AnalogF1(apsuChanInfo[iChanIdx], psuOutFile);
 	    iChanIdx++;
         } while ( iChanIdx < 256 ); //
 	
@@ -642,7 +642,7 @@ EnI106Status AssembleAttributesFromTMATS(FILE *psuOutFile, SuTmatsInfo * psuTmat
 
 /* ------------------------------------------------------------------------ */
 
-  EnI106Status I106_CALL_DECL PrintChanAttributes_ANALOGF1(SuChanInfo * psuChanInfo, FILE * psuOutFile)
+  EnI106Status I106_CALL_DECL PrintChanAttributes_AnalogF1(SuChanInfo * psuChanInfo, FILE * psuOutFile)
 {
     if (psuChanInfo == NULL)
     {
@@ -658,6 +658,8 @@ EnI106Status AssembleAttributesFromTMATS(FILE *psuOutFile, SuTmatsInfo * psuTmat
     return I106_OK;
 }
   
+/* ------------------------------------------------------------------------ */
+
 void vUsage(void)
 {
     printf("\nIDMPANALOG "MAJOR_VERSION"."MINOR_VERSION" "__DATE__" "__TIME__"\n");
