@@ -37,6 +37,7 @@
  'Stolen' by Hans-Gerhard Flohr and modified for PcmF1 dumping
  2014/04/07 Initial Version 1.0
  2014/04/23 Version 1.1 
+ 2015/09/01 Adding ability to dump data directly to a data file
  Changes:   Inversing meaning of swap data bytes / words
             Correcting llintpkttime calculation if a new packet was received
 
@@ -69,7 +70,7 @@ extern "C" {
  */
 
 #define MAJOR_VERSION  "01"
-#define MINOR_VERSION  "01"
+#define MINOR_VERSION  "02"
 
 #if defined(__GNUC__)
 #define _MAX_PATH    4096
@@ -110,10 +111,10 @@ typedef struct              _SuChanInfo         // Channel info
  * -------------------
  */
 
-void vPrintTmats(SuTmatsInfo * psuTmatsInfo, FILE * psuOutFile);
-EnI106Status AssembleAttributesFromTMATS(FILE *psuOutFile, SuTmatsInfo * psuTmatsInfo, SuChanInfo * apsuChanInfo[], int MaxSuChanInfo);
+void vPrintTmats(SuTmatsInfo * psuTmatsInfo, FILE * psuOutStatsFile);
+EnI106Status AssembleAttributesFromTMATS(FILE *psuOutStatsFile, SuTmatsInfo * psuTmatsInfo, SuChanInfo * apsuChanInfo[], int MaxSuChanInfo);
 int PostProcessFrame_PcmF1(SuPcmF1_CurrMsg * psuCurrMsg);
-  EnI106Status I106_CALL_DECL PrintChanAttributes_PcmF1(SuChanInfo * psuChanInfo, FILE * psuOutFile);
+  EnI106Status I106_CALL_DECL PrintChanAttributes_PcmF1(SuChanInfo * psuChanInfo, FILE * psuOutStatsFile);
 void vUsage(void);
 
 
@@ -123,9 +124,11 @@ int main(int argc, char ** argv)
     {
 
     char                    szInFile[256];     // Input file name
-    char                    szOutFile[256];    // Output file name
+    char                    szOutStatsFile[256];    // Output stats file name
+    char                    szOutDataFile[256];     // Output data  file name
     int                     iArgIdx;
-    FILE                  * psuOutFile;        // Output file handle
+    FILE                  * psuOutStatsFile;        // Output file handle
+    FILE                  * psuOutDataFile;
     char                  * szTime;
     unsigned int            uChannel;          // Channel number
     int                     bVerbose;
@@ -161,7 +164,8 @@ int main(int argc, char ** argv)
     bDontSwapRawData = bFALSE;            /* don't swap the raw input data           */
 
     szInFile[0]  = '\0';
-    strcpy(szOutFile,"");                // Default is stdout
+    strcpy(szOutStatsFile,"");                // Default is stdout
+    strcpy(szOutDataFile,"");                 // Same for data
 
     memset(&suTmatsInfo, 0, sizeof(suTmatsInfo) );
     memset(apsuChanInfo, 0, sizeof(apsuChanInfo));
@@ -188,6 +192,16 @@ int main(int argc, char ** argv)
                         sscanf(argv[iArgIdx],"%u",&uChannel);
                         break;
 
+                    case 'd' :                   /* Data file */
+                        iArgIdx++;
+                        if(iArgIdx >= argc)
+                            {
+                            vUsage();
+                            return 1;
+                            }
+                        sscanf(argv[iArgIdx],"%s",&szOutDataFile);
+                        break;
+
                     case 's' :                   /* Swap bytes */
                         bDontSwapRawData = 1;
                         break;
@@ -204,7 +218,12 @@ int main(int argc, char ** argv)
 
             default :
                 if (szInFile[0] == '\0') strcpy(szInFile, argv[iArgIdx]);
-                else                     strcpy(szOutFile,argv[iArgIdx]);
+                else 
+		    { 
+			strcpy(szOutStatsFile,argv[iArgIdx]);
+		      //		      else
+		      //			  strcpy(szOutDataFile,argv[iArgIdx]);
+		    }
                 break;
 
             } /* end command line arg switch */
@@ -215,6 +234,12 @@ int main(int argc, char ** argv)
         vUsage();
         return 1;
         }
+
+    if (strlen(szOutDataFile) <= 1)
+	{
+	strcpy(szOutDataFile,szOutStatsFile);
+	printf("Using %s as both stats and data file\n",szOutStatsFile);
+	}
 
 /*
  * Opening banner
@@ -259,22 +284,40 @@ int main(int argc, char ** argv)
  */
 
     // If output file specified then open it    
-    if (strlen(szOutFile) != 0)
+    if (strlen(szOutStatsFile) != 0)
         {
-        psuOutFile = fopen(szOutFile,"w");
-        if (psuOutFile == NULL) 
+        psuOutStatsFile = fopen(szOutStatsFile,"w");
+        if (psuOutStatsFile == NULL) 
             {
-            fprintf(stderr, "Error opening output file\n");
+            fprintf(stderr, "Error opening output file for stats\n");
             return 1;
             }
-        
-       fprintf(psuOutFile, "Input file: %s\n", szInFile);
-       }
+
+	fprintf(psuOutStatsFile, "Input file: %s\n", szInFile);
+
+	if (strcmp(szOutStatsFile, szOutDataFile) != 0) //these are separate files
+	    {
+	    psuOutDataFile = fopen(szOutDataFile,"wb");
+	    if (psuOutStatsFile == NULL) 
+		{
+		fprintf(stderr, "Error opening output file for data\n");
+		return 1;
+		}
+	    fprintf(psuOutStatsFile, "Data file: %s\n", szOutDataFile);
+	    }
+	else 
+	    {
+	    psuOutDataFile = psuOutStatsFile;
+	    }
+
+	
+	}
 
     // No output file name so use stdout
     else
         {
-        psuOutFile = stdout;
+        psuOutStatsFile = stdout;
+	psuOutDataFile = stdout;
         }
 
 /*
@@ -321,7 +364,7 @@ int main(int argc, char ** argv)
         return 1;
         }
 
-    enStatus = AssembleAttributesFromTMATS(psuOutFile, &suTmatsInfo, apsuChanInfo, MAX_SUCHANINFO);
+    enStatus = AssembleAttributesFromTMATS(psuOutStatsFile, &suTmatsInfo, apsuChanInfo, MAX_SUCHANINFO);
     if (enStatus != I106_OK) 
         {
         fprintf(stderr, " Error assembling Pcm attributes from TMATS record : Status = %d\n", enStatus);
@@ -335,11 +378,11 @@ int main(int argc, char ** argv)
 
 	do
 	{
-	  enStatus = PrintChanAttributes_PcmF1(apsuChanInfo[iChanIdx],psuOutFile);
+	  enStatus = PrintChanAttributes_PcmF1(apsuChanInfo[iChanIdx],psuOutStatsFile);
 	    iChanIdx++;
         } while ( iChanIdx < 256 ); //
 
-        vPrintTmats(&suTmatsInfo, psuOutFile);
+        vPrintTmats(&suTmatsInfo, psuOutStatsFile);
 
         return(0);
         }
@@ -443,24 +486,31 @@ int main(int argc, char ** argv)
                         PrintDigits += 2;
 
                      // Print the channel
-                     fprintf(psuOutFile, "PCMIN-%d: ", suI106Hdr.uChID);
+                     fprintf(psuOutStatsFile, "PCMIN-%d: ", suI106Hdr.uChID);
 
                      // Print out the time
                      enI106_RelInt2IrigTime(m_iI106Handle, suPcmF1Msg.llIntPktTime, &suTime);
 //                   szTime = IrigTime2StringF(&suTime, -1);
                      szTime = IrigTime2String(&suTime);
-                     fprintf(psuOutFile,"%s ", szTime);
+                     fprintf(psuOutStatsFile,"%s ", szTime);
 
+		     //If verbose, show me the minor frame number
+		     if ( bVerbose ) 
+			 {
+			 fprintf(psuOutStatsFile,"\n");
+			 fprintf(psuOutStatsFile,"Minor frame        : %lu\n",suPcmF1Msg.psuAttributes->ulNumMinorFrames);
+			 fprintf(psuOutStatsFile,"Bits in minor frame: %lu\n",suPcmF1Msg.psuAttributes->ulBitsInMinorFrame);
+			 }		     
                      // Print out the data
                      for(Count = 0; Count < suPcmF1Msg.psuAttributes->ulWordsInMinorFrame - 1; Count++)
                          {
                         static char cParityError;
                         cParityError = suPcmF1Msg.psuAttributes->pauOutBufErr[Count] ? '?' : ' ';
-                        // Note the I64 in the format
-                        fprintf(psuOutFile, "%0*I64X%c", PrintDigits, 
-                             suPcmF1Msg.psuAttributes->paullOutBuf[Count], cParityError);
+                        // Note the I64 in the format, and OutDataFile can be the same as OutStatsFile
+                        fprintf(psuOutDataFile, "%0*I64X%c", PrintDigits, 
+                             suPcmF1Msg.psuAttributes->paullOutBuf[Count], cParityError); 
                          }
-                     fprintf(psuOutFile,"\n");
+                     fprintf(psuOutStatsFile,"\n");
 
                      // Get the next PCMF1 message
                     enStatus = enI106_Decode_NextPcmF1(&suPcmF1Msg);
@@ -489,7 +539,7 @@ int main(int argc, char ** argv)
  */
 
     enI106Ch10Close(m_iI106Handle);
-    fclose(psuOutFile);
+    fclose(psuOutStatsFile);
 
     return 0;
     }
@@ -498,7 +548,7 @@ int main(int argc, char ** argv)
 
 /* ------------------------------------------------------------------------ */
 /* Note: Most of the code below is from Irig106.org / Bob Baggerman */
-void vPrintTmats(SuTmatsInfo * psuTmatsInfo, FILE * psuOutFile)
+void vPrintTmats(SuTmatsInfo * psuTmatsInfo, FILE * psuOutStatsFile)
     {
     int                     iGIndex;
     int                     iRIndex;
@@ -510,13 +560,13 @@ void vPrintTmats(SuTmatsInfo * psuTmatsInfo, FILE * psuOutFile)
     // Print out the TMATS info
     // ------------------------
 
-    fprintf(psuOutFile,"\n=-=-= PCMF1 Channel Summary =-=-=\n\n");
+    fprintf(psuOutStatsFile,"\n=-=-= PCMF1 Channel Summary =-=-=\n\n");
 
     // G record
-    fprintf(psuOutFile,"Program Name - %s\n",psuTmatsInfo->psuFirstGRecord->szProgramName);
-    fprintf(psuOutFile,"\n");
-    fprintf(psuOutFile,"Channel  Data Source         \n");
-    fprintf(psuOutFile,"-------  --------------------\n");
+    fprintf(psuOutStatsFile,"Program Name - %s\n",psuTmatsInfo->psuFirstGRecord->szProgramName);
+    fprintf(psuOutStatsFile,"\n");
+    fprintf(psuOutStatsFile,"Channel  Data Source         \n");
+    fprintf(psuOutStatsFile,"-------  --------------------\n");
 
     // Data sources
     psuGDataSource = psuTmatsInfo->psuFirstGRecord->psuFirstGDataSource;
@@ -540,9 +590,9 @@ void vPrintTmats(SuTmatsInfo * psuTmatsInfo, FILE * psuOutFile)
                 if (strcasecmp(psuRDataSource->szChannelDataType,"PCMIN") == 0)
                     {
                     iRDsiIndex = psuRDataSource->iDataSourceNum;
-                    fprintf(psuOutFile," %5i ",   psuRDataSource->iTrackNumber);
-                    fprintf(psuOutFile,"  %-20s", psuRDataSource->szDataSourceID);
-                    fprintf(psuOutFile,"\n");
+                    fprintf(psuOutStatsFile," %5i ",   psuRDataSource->iTrackNumber);
+                    fprintf(psuOutStatsFile,"  %-20s", psuRDataSource->szDataSourceID);
+                    fprintf(psuOutStatsFile,"\n");
                     }
                 psuRDataSource = psuRDataSource->psuNextRDataSource;
                 } while (bTRUE);
@@ -588,7 +638,7 @@ void FreeChanInfoTable(SuChanInfo * apsuChanInfo[], int MaxSuChanInfo)
 
 /* ------------------------------------------------------------------------ */
 
-EnI106Status AssembleAttributesFromTMATS(FILE *psuOutFile, SuTmatsInfo * psuTmatsInfo, SuChanInfo * apsuChanInfo[], int MaxSuChanInfo)
+EnI106Status AssembleAttributesFromTMATS(FILE *psuOutStatsFile, SuTmatsInfo * psuTmatsInfo, SuChanInfo * apsuChanInfo[], int MaxSuChanInfo)
     {
     static char                   * szModuleText = "Assemble Attributes From TMATS";
     char                          szText[_MAX_PATH + _MAX_PATH];
@@ -605,7 +655,7 @@ EnI106Status AssembleAttributesFromTMATS(FILE *psuOutFile, SuTmatsInfo * psuTmat
     if((psuTmatsInfo->psuFirstGRecord == NULL) || (psuTmatsInfo->psuFirstRRecord == NULL))
         {
         _snprintf(&szText[TextLen], SizeOfText - TextLen, "%s: %s\n", szModuleText, szI106ErrorStr(I106_INVALID_DATA));
-        fprintf(psuOutFile, szText);
+        fprintf(psuOutStatsFile, szText);
         return(I106_INVALID_DATA);
         }
         
@@ -632,7 +682,7 @@ EnI106Status AssembleAttributesFromTMATS(FILE *psuOutFile, SuTmatsInfo * psuTmat
                 if((apsuChanInfo[iTrackNumber] = (SuChanInfo *)calloc(1, sizeof(SuChanInfo))) == NULL)
                     {
                     _snprintf(&szText[TextLen], SizeOfText - TextLen, "%s: %s\n", szModuleText, szI106ErrorStr(I106_BUFFER_TOO_SMALL));
-                    fprintf(psuOutFile, szText);
+                    fprintf(psuOutStatsFile, szText);
                     FreeChanInfoTable(apsuChanInfo, MaxSuChanInfo);
                     return(I106_BUFFER_TOO_SMALL);
                     }
@@ -648,7 +698,7 @@ EnI106Status AssembleAttributesFromTMATS(FILE *psuOutFile, SuTmatsInfo * psuTmat
                     if((apsuChanInfo[iTrackNumber]->psuAttributes = calloc(1, sizeof(SuPcmF1_Attributes))) == NULL)
                         {
                         _snprintf(&szText[TextLen], SizeOfText - TextLen, "%s: %s\n", szModuleText, szI106ErrorStr(I106_BUFFER_TOO_SMALL));
-                        fprintf(psuOutFile, szText);
+                        fprintf(psuOutStatsFile, szText);
                         FreeChanInfoTable(apsuChanInfo, MaxSuChanInfo);
                         return(I106_BUFFER_TOO_SMALL);
                         }
@@ -709,18 +759,18 @@ int PostProcessFrame_PcmF1(SuPcmF1_CurrMsg * psuCurrMsg)
 
 /* ------------------------------------------------------------------------ */
 
-  EnI106Status I106_CALL_DECL PrintChanAttributes_PcmF1(SuChanInfo * psuChanInfo, FILE * psuOutFile )
+  EnI106Status I106_CALL_DECL PrintChanAttributes_PcmF1(SuChanInfo * psuChanInfo, FILE * psuOutStatsFile )
 {
     if (psuChanInfo == NULL)
     {
         return I106_INVALID_PARAMETER; 
     }
-    if ( (psuChanInfo->psuRDataSrc == NULL)  || (psuChanInfo->psuAttributes == NULL) || (psuOutFile == NULL) )
+    if ( (psuChanInfo->psuRDataSrc == NULL)  || (psuChanInfo->psuAttributes == NULL) || (psuOutStatsFile == NULL) )
     {
         return I106_INVALID_PARAMETER; 
     }
 
-    PrintAttributesfromTMATS_PcmF1(psuChanInfo->psuRDataSrc, psuChanInfo->psuAttributes, psuOutFile);
+    PrintAttributesfromTMATS_PcmF1(psuChanInfo->psuRDataSrc, psuChanInfo->psuAttributes, psuOutStatsFile);
 
     return I106_OK;
 }
@@ -735,6 +785,7 @@ void vUsage(void)
     printf("Usage: idmppcm <input file> <output file> [flags]\n");
     printf("   <filename> Input/output file names        \n");
     printf("   -v         Verbose                        \n");
+    printf("   -d         Dedicated data file (optional) \n");
     printf("   -c ChNum   Channel Number (default all)   \n");
     printf("   -s         Don't swap raw data            \n");
     printf("   -T         Print TMATS summary and exit   \n");
