@@ -43,6 +43,7 @@
 
 */
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -132,6 +133,9 @@ int main(int argc, char ** argv)
     char                  * szTime;
     unsigned int            uChannel;          // Channel number
     int                     bVerbose;
+    int                     bUseExternalTMATS;
+    char                    szExternalTMATSFile[256];
+    FILE                  * psuExternalTMATSFile;
     int                     bPrintTMATS;
     int                     bDontSwapRawData;
     unsigned long           ulBuffSize = 0L;
@@ -160,12 +164,14 @@ int main(int argc, char ** argv)
 
     uChannel         = -1;
     bVerbose         = bFALSE;            /* No verbosity                      */
+    bUseExternalTMATS= bFALSE;
     bPrintTMATS      = bFALSE;
     bDontSwapRawData = bFALSE;            /* don't swap the raw input data           */
 
     szInFile[0]  = '\0';
     strcpy(szOutStatsFile,"");                // Default is stdout
     strcpy(szOutDataFile,"");                 // Same for data
+    strcpy(szExternalTMATSFile,"");                 // Same for data
 
     memset(&suTmatsInfo, 0, sizeof(suTmatsInfo) );
     memset(apsuChanInfo, 0, sizeof(apsuChanInfo));
@@ -200,6 +206,17 @@ int main(int argc, char ** argv)
                             return 1;
                             }
                         sscanf(argv[iArgIdx],"%s",&szOutDataFile);
+                        break;
+
+                    case 'E' :                   /* Data file */
+                        iArgIdx++;
+                        if(iArgIdx >= argc)
+                            {
+                            vUsage();
+                            return 1;
+                            }
+                        sscanf(argv[iArgIdx],"%s",&szExternalTMATSFile);
+			bUseExternalTMATS = bTRUE;
                         break;
 
                     case 's' :                   /* Swap bytes */
@@ -341,13 +358,45 @@ int main(int argc, char ** argv)
 
         // Process the TMATS info
         memset( &suTmatsInfo, 0, sizeof(suTmatsInfo) );
-        enStatus = enI106_Decode_Tmats(&suI106Hdr, pvBuff, &suTmatsInfo);
-        if (enStatus != I106_OK) 
-            {
-            fprintf(stderr, " Error processing TMATS record : Status = %d\n", enStatus);
-            return 1;
-            }
+	if (bUseExternalTMATS)
+	    {
+	    psuExternalTMATSFile = fopen(szExternalTMATSFile,"rb");
+	    if (psuExternalTMATSFile == NULL) 
+		{
+		fprintf(stderr, "Error opening external TMATS file!\n");
+		return 1;
+		}
+	    fseek(psuExternalTMATSFile, 0, SEEK_END);
+	    int64_t ullTMATSExtFSz = ftell(psuExternalTMATSFile);
+	    fseek(psuExternalTMATSFile, 0, SEEK_SET);
+	    
+	    char *pvTmatsText = malloc(ullTMATSExtFSz + 1);
+	    fread(pvTmatsText, ullTMATSExtFSz, 1, psuExternalTMATSFile);
+	    fclose(psuExternalTMATSFile);
+	    pvTmatsText[ullTMATSExtFSz] = 0;
 
+	    //read in this new, cool TMATS info
+	    enStatus = enI106_Decode_Tmats_Text(pvTmatsText, ullTMATSExtFSz, &suTmatsInfo);
+	    if (enStatus != I106_OK) 
+		{
+		fprintf(stderr, " Error processing TMATS record : Status = %d\n", enStatus);
+		return 1;
+		}
+	    
+	    }
+	else 
+	    {
+	    enStatus = enI106_Decode_Tmats(&suI106Hdr, pvBuff, &suTmatsInfo);
+	    if (enStatus != I106_OK) 
+		{
+		    fprintf(stderr, " Error processing TMATS record : Status = %d\n", enStatus);
+		    return 1;
+		}
+
+	    psuExternalTMATSFile = NULL;
+	    }
+		
+		
         } // end if TMATS
 
     // TMATS not first message
@@ -357,12 +406,12 @@ int main(int argc, char ** argv)
         return 1;
         }
 
-    enStatus = enI106_Decode_Tmats(&suI106Hdr, pvBuff, &suTmatsInfo);
-    if (enStatus != I106_OK) 
-        {
-        fprintf(stderr, " Error processing TMATS record : Status = %d\n", enStatus);
-        return 1;
-        }
+    /* enStatus = enI106_Decode_Tmats(&suI106Hdr, pvBuff, &suTmatsInfo); */
+    /* if (enStatus != I106_OK)  */
+    /*     { */
+    /*     fprintf(stderr, " Error processing TMATS record : Status = %d\n", enStatus); */
+    /*     return 1; */
+    /*     } */
 
     enStatus = AssembleAttributesFromTMATS(psuOutStatsFile, &suTmatsInfo, apsuChanInfo, MAX_SUCHANINFO);
     if (enStatus != I106_OK) 
@@ -386,6 +435,7 @@ int main(int argc, char ** argv)
 
         return(0);
         }
+
 
     
 
@@ -449,6 +499,10 @@ int main(int argc, char ** argv)
 
                 // Get the attributes
                 suPcmF1Msg.psuAttributes = (SuPcmF1_Attributes *)apsuChanInfo[suI106Hdr.uChID]->psuAttributes;
+
+		//now kluge a bunch of stuff
+		//		suPcmF1Msg.psuAttributes->ulBitsInMinorFrame = 1200;
+		//		suPcmF1Msg.psuAttributes->ulWordsInMinorFrame = 75;
  
                 assert(suPcmF1Msg.psuAttributes != NULL);
 
@@ -489,7 +543,8 @@ int main(int argc, char ** argv)
                      fprintf(psuOutStatsFile, "PCMIN-%d: ", suI106Hdr.uChID);
 
                      // Print out the time
-                     enI106_RelInt2IrigTime(m_iI106Handle, suPcmF1Msg.llIntPktTime, &suTime);
+		     //                     enI106_RelInt2IrigTime(m_iI106Handle, suPcmF1Msg.llIntPktTime, &suTime);
+                     enI106_RelInt2IrigTime(m_iI106Handle, suPcmF1Msg.llBaseIntPktTime, &suTime);
 //                   szTime = IrigTime2StringF(&suTime, -1);
                      szTime = IrigTime2String(&suTime);
                      fprintf(psuOutStatsFile,"%s ", szTime);
@@ -498,17 +553,25 @@ int main(int argc, char ** argv)
 		     if ( bVerbose ) 
 			 {
 			 fprintf(psuOutStatsFile,"\n");
-			 fprintf(psuOutStatsFile,"Minor frame        : %lu\n",suPcmF1Msg.psuAttributes->ulNumMinorFrames);
-			 fprintf(psuOutStatsFile,"Bits in minor frame: %lu\n",suPcmF1Msg.psuAttributes->ulBitsInMinorFrame);
+			 //			 fprintf(psuOutStatsFile,"Minor frame        : %lu\n",suPcmF1Msg.psuAttributes->ulNumMinorFrames);
+			 //			 fprintf(psuOutStatsFile,"Bits in minor frame: %lu\n",suPcmF1Msg.psuAttributes->ulBitsInMinorFrame);
 			 }		     
                      // Print out the data
-                     for(Count = 0; Count < suPcmF1Msg.psuAttributes->ulWordsInMinorFrame - 1; Count++)
+		     //		     for(Count = 0; Count < suPcmF1Msg.psuAttributes->ulWordsInMinorFrame - 1; Count++)
+		     for(Count = 0; Count < suPcmF1Msg.psuAttributes->ulWordsInMinorFrame; Count++)
                          {
-                        static char cParityError;
-                        cParityError = suPcmF1Msg.psuAttributes->pauOutBufErr[Count] ? '?' : ' ';
+			 static char cParityError;
+			 cParityError = suPcmF1Msg.psuAttributes->pauOutBufErr[Count] ? '?' : ' ';
                         // Note the I64 in the format, and OutDataFile can be the same as OutStatsFile
-                        fprintf(psuOutDataFile, "%0*I64X%c", PrintDigits, 
-                             suPcmF1Msg.psuAttributes->paullOutBuf[Count], cParityError); 
+			//                        fprintf(psuOutDataFile, "%0*I64X%c", PrintDigits, 
+			//                             suPcmF1Msg.psuAttributes->paullOutBuf[Count], cParityError); 
+			//			fprintf(psuOutDataFile,"%0*" PRIX64 "%c", PrintDigits, 
+			//				suPcmF1Msg.psuAttributes->paullOutBuf[Count], cParityError); 
+
+			//just do binary
+			 fwrite(&suPcmF1Msg.psuAttributes->paullOutBuf[Count], \
+				1,PrintDigits/2,psuOutDataFile); 
+			//			       1,sizeof(suPcmF1Msg.psuAttributes->paullOutBuf),psuOutDataFile); 
                          }
                      fprintf(psuOutStatsFile,"\n");
 
@@ -786,6 +849,7 @@ void vUsage(void)
     printf("   <filename> Input/output file names        \n");
     printf("   -v         Verbose                        \n");
     printf("   -d         Dedicated data file (optional) \n");
+    printf("   -E         External TMATS file (optional) \n");
     printf("   -c ChNum   Channel Number (default all)   \n");
     printf("   -s         Don't swap raw data            \n");
     printf("   -T         Print TMATS summary and exit   \n");
