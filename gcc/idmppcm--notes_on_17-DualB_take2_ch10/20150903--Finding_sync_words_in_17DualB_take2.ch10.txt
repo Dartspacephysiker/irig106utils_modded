@@ -1,0 +1,224 @@
+2015/09/03
+Input file: Andoya_cals/17-DualB_take2.ch10
+
+So we're having this issue finding sync words in the data. According to the TMATS summary, the sync word info is this:
+
+========================================
+TMATS Attributes, Data Source TM1BS1
+========================================
+
+PCM Minor Frame Sync Pattern    :       0XFAF33400
+PCM Minor Frame Sync Pat Len    :       32
+
+Here is where I'm finding faf334 using 
+od -t x8z --address-radix=d \ Andoya_cals/17-DualB_take2.ch10 | less
+
+205671776 cc67c07cf3530db2 07d21faf33422463  >..S.|.g.c$B3....<
+
+284533952 0472036d01faf334 02990b2402bbfda9  >4...m.r.....$...<
+
+685069968 f168e2e4dc25ec69 e46cfaf334be2f60  >i.%...h.`/.4..l.<
+
+1377746048 faf334e135edf191 23d3e26ad4b4e760  >...5.4..`...j..#<
+
+at each sync found, let's get:
+==============================
+printf "\n\n**Minor frame info**\n"
+printf "psuAttributes->ulMinorFrameBitCount : %lu\n", psuAttributes->ulMinorFrameBitCount
+printf "psuAttributes->ulBitsInMinorFrame   : %lu\n", psuAttributes->ulBitsInMinorFrame
+printf "psuAttributes->ulMinorFrameWordCount: %lu\n", psuAttributes->ulMinorFrameWordCount
+printf "psuAttributes->ulDataWordBitCount   : %lu\n", psuAttributes->ulDataWordBitCount
+printf "\n"
+printf "psuAttributes->ullSyncCount         : %llu\n", psuAttributes->ullSyncCount
+printf "psuAttributes->ullSyncErrors        : %llu\n", psuAttributes->ullSyncErrors
+
+printf "\n\n**Packet info**\n"
+printf "psuAttributes->ulBitPosition        : %lu (/%lu in ulSubPacket)\n", psuAttributes->ulBitPosition, psuMsg->ulSubPacketBits
+printf "psuMsg->ulSubPacketBits             : %lu\n", psuMsg->ulSubPacketBits
+
+
+Once MinorFrameSyncCount == 1, I have this as psuAttributes->ullTestWord: 
+p/x psuAttributes->ullTestWord
+$6 = 0xd360c0c2faf33400  (64 bits!)
+p/x psuAttributes->ullMinorFrameSyncMask
+$7 = 0xffffffff
+p/x psuAttributes->ullMinorFrameSyncPat
+$8 = 0xfaf33400
+p/x  psuAttributes->ulMinSyncs
+$9 = 0x0
+p psuAttributes->ulBitsInMinorFrame
+$10 = 1200
+p psuAttributes->ulWordsInMinorFrame
+$11 = 75
+p psuAttributes->ulCommonWordLen
+$12 = 16
+p/x psuAttributes->ullCommonWordMask
+$17 = 0xffff
+p psuMsg->llBaseIntPktTime
+$15 = 401932572207
+p psuMsg->psuChanSpec->bAlignment //Means we are 16-bit aligned, but is NOT APPLICABLE TO THROUGHPUT MODE
+$16 = 0
+
+So where are we in the message at any given time?
+=================================================
+If you check out GetNextBit_PcmF1, you'll see that 
+psuMsg->pauData, psuAttributes->ulBitPosition together give the position within the current message
+
+How saving works
+================
+-->So if(psuAttributes->ulMinorFrameWordCount >= psuAttributes->ulWordsInMinorFrame), we loop AGAIN and find another sync word, except THIS time lSaveData = 2. 
+-->We compute the intrapacket time of the new sync word, set the DataWordBitCount to 0, set lSaveData to 1, and return I106_OK. 
+-->We then do PostProcessFrame_PcmF1 within idmppcm, which applies the word mask to each word in the saved frame (in our case, each word is 16-bit). THEN
+--> 
+
+        if(psuAttributes->ulMinorFrameWordCount >= psuAttributes->ulWordsInMinorFrame)
+        {
+            psuAttributes->lSaveData = 2;
+
+            // Don't release the data here but wait for a trailing sync word. 
+        }
+
+What does psuMsg->uBytesRead mean?
+==================================
+Well, as soon as the psuMsg->pauData gets set to the beginning of the data, we consider psuMsg->uBytesRead = psuMsg->ulSubPacketLen + sizeof(SuPcmF1_IntraPktHeader). So it's not good for much once we start looping through the data.
+
+Does the sync word get saved??
+==============================
+-->Don't think so. It shows up as the very first few bytes for 17DualB_take2, and promptly gets masked off
+
+*Before ullCommonWordMask*
+
+*After ullCommonWordMask*
+ p/x suPcmF1Msg.psuAttributes->paullOutBuf[0]
+$2 = 0xc0ec
+p/x suPcmF1Msg.psuAttributes->paullOutBuf[1]
+$4 = 0x1d31
+ p/x suPcmF1Msg.psuAttributes->paullOutBuf[2]
+$5 = 0x33b
+p/x suPcmF1Msg.psuAttributes->paullOutBuf[75-1]
+$6 = 0x0
+
+Test word right before saving happens
+=====================================
+Here are the stats
+
+
+
+
+
+
+What about the first PCM message we get in 17DualB?
+===================================================
+sync=-1
+When psuAttributes->ulMinorFrameBitCount == 4, there is no sync in sight. I tried x/75xw psuMsg->pauData, and no permutation of the sync word could be found. I'm going to run the program until I find a sync word, and THEN see what the minorframebitcount is.
+
+sync=0
+OK, I find a sync word, and p psuAttributes->ulMinorFrameBitCount gives $28 = 112315319. psuAttributes->ullSyncCount == 0 as a result (since it starts off at -1, or 18446744073709551615 as a uint64_t).
+
+sync=1
+All right, now I've found the next sync word and psuAttributes->ulMinorFrameBitCount is 1200. 
+
+x/75xw psuMsg->pauData
+0x622844:	0x0004	0x422d	0x6103	0x3a90	0x0785	0xffff	0xffff	0xffff
+0x622854:	0xa3ff	0x8720	0xffff	0x46ba	0xff87	0xffff	0xffff	0xffff
+0x622864:	0x4da5	0x3483	0xc220	0x87ae	0xffff	0x0080	0xff07	0xb2ff
+0x622874:	0x07a0	0xffff	0x44b8	0x5503	0x7f00	0xffff	0x0bfe	0x14c4
+0x622884:	0xff87	0xb3ff	0x0737	0xffff	0xffff	0xffff	0xd1ff	0x0714
+0x622894:	0xffff	0x7cbc	0x4880	0x5e00	0x0520	0xd0fd	0x3954	0x0100
+0x6228a4:	0xd1ff	0x8290	0xf5c5	0x68e6	0x5f03	0x4c80	0x8651	0x7077
+0x6228b4:	0xea43	0x0080	0x0000	0x0300	0x5822	0x5c3c	0xac83	0x3070
+0x6228c4:	0x837e	0xe025	0xca3b	0x1484	0x2b0c	0x04b0	0xb83f	0xaa38
+0x6228d4:	0x2983	0x0090	0x1060
+
+(gdb) p psuAttributes->ulBitPosition >> 3
+$60 = 4004
+(gdb) p psuMsg->ulSubPacketBits >> 3
+$61 = 8184
+
+p psuAttributes->ulBitPosition - psuAttributes->ulMinorFrameBitCount
+$71 = 30839
+ p ( psuAttributes->ulBitPosition - psuAttributes->ulMinorFrameBitCount ) >> 3
+$72 = 3854
+--> So the last header word thing should be at that array index, maybe, in the 7th bit position
+(gdb) p ( psuAttributes->ulBitPosition - psuAttributes->ulMinorFrameBitCount ) % 8
+$76 = 7
+p/x ( psuMsg->pauData[3854] ) 
+$93 = 0x01
+p/x ( psuMsg->pauData[3855] ) 
+$91 = 0x81
+p/x ( psuMsg->pauData[3856] ) 
+$92 = 0xd8
+p/x ( psuMsg->pauData[3857] ) 
+$94 = 0x3a
+p/x ( psuMsg->pauData[3858] ) 
+$95 = 0x62
+p/x ( psuMsg->pauData[3859] ) 
+$96 = 0x06
+p/x ( psuMsg->pauData[3860] ) 
+$97 = 0x77
+p/x ( psuMsg->pauData[3861] ) 
+$98 = 0xb0
+p/x ( psuMsg->pauData[3862] ) 
+$99 = 0x2d
+So assembled, it's 0181D83A620677B02D
+
+or else 2DB07706623AD88101
+
+
+
+*****FIND THAT SYNC WORD********
+
+***First check out test word, where the sync pattern is plain for all to see
+p/x psuAttributes->ullTestWord
+$123 = 0xd360c0c2faf33400
+
+***Now shift everything over by one bit, and it's not as clear; the sync pattern lies in 5f5e66800
+(gdb) p/x psuAttributes->ullTestWord << 1
+$122 = 0xa6c18185f5e66800 *see below
+
+***How does it look in the data buffer, printing it out through gdb?
+(gdb) x/1xw (&psuMsg->pauData[4000])
+0x6237e4:	0x68e6f585
+68 e6 f5 85
+Swap every half-byte : 86 6e 5f 58
+Now reverse the order: 85 f5 e6 68
+Smashed together...    85f5e668
+So it isn't very recognizable from this
+-->So in ullTestWord, the sync pattern shows up as 5f5e66800
+
+spencerh@thelonious ~ $ h2b 5F5E66800
+... 10 1111 1010 11 1100 1100 11 0100 0000 00 000
+
+NOTE:  1111 1010 11 1100 1100 11 0100 0000 00
+       |  SYNC 1  | |  SYNC 2  | |  SYNC 3  |
+
+
+
+****FIND THE SYNC WORD PREVIOUS TO THIS ONE
+(gdb) p (4000*8 - 1200)/8
+$127 = 3850
+OK, now this:
+x/1xw (&psuMsg->pauData[3850])
+0x62374e:	0x68e6f501
+As above,
+68 e6 f5 01
+86 6e 5f 10
+01f5e668
+In binary:
+1111 1010 11 1100 1100 11 0100 0 …
+|SYNC 1      |SYNC 2      |SYNC 3
+Voilá!
+
+2015/09/04
+
+Also,
+(gdb) p/t *(uint64_t *)((uint64_t)psuMsg->pauData + 3849)
+$143 = 1101100010000001000000010110100011100110111101010000000100000000
+(gdb) p/x *(uint64_t *)((uint64_t)psuMsg->pauData + 3849)
+$144 = 0xd8810168e6f50100
+-->By reading each as a byte and simply reversing the order,
+(gdb) p/t 0x01f5e668
+$151 = 1111101011 1100110011 01000 ...
+       |SYNC1     | SYNC 2   | SYNC 3....
+
+OK, so we've got the sync words now. We want them written out, for crying out loud. So what do we do? 

@@ -147,6 +147,12 @@ int main(int argc, char ** argv)
     SuIrig106Time           suTime;
     SuTmatsInfo             suTmatsInfo;
 
+    //For time
+    int64_t                 llBaseCounter;
+    int64_t                 llSec;
+    int64_t                 llFrac;
+    double                  dRelTime;
+
     // Channel Info array
     #define MAX_SUCHANINFO  0x10000             // 64kb, ... a rather great pointer table for the channel infos 
                                                 // but the channel is a 16 bit word...
@@ -346,6 +352,9 @@ int main(int argc, char ** argv)
     if (enStatus != I106_OK)
         return 1;
 
+    //Get base time for this run
+    vTimeArray2LLInt(suI106Hdr.aubyRefTime, &llBaseCounter);
+
     if (suI106Hdr.ubyDataType == I106CH10_DTYPE_TMATS)
         {
         // Make a data buffer for TMATS
@@ -544,18 +553,19 @@ int main(int argc, char ** argv)
 
                      // Print out the time
 		     //                     enI106_RelInt2IrigTime(m_iI106Handle, suPcmF1Msg.llIntPktTime, &suTime);
-                     enI106_RelInt2IrigTime(m_iI106Handle, suPcmF1Msg.llBaseIntPktTime, &suTime);
-//                   szTime = IrigTime2StringF(&suTime, -1);
-                     szTime = IrigTime2String(&suTime);
-                     fprintf(psuOutStatsFile,"%s ", szTime);
+		     //szTime = IrigTime2StringF(&suTime, -1);
+                     //szTime = IrigTime2String(&suTime);
+                     //fprintf(psuOutStatsFile,"%s ", szTime);
 
-		     //If verbose, show me the minor frame number
-		     if ( bVerbose ) 
-			 {
-			 fprintf(psuOutStatsFile,"\n");
-			 //			 fprintf(psuOutStatsFile,"Minor frame        : %lu\n",suPcmF1Msg.psuAttributes->ulNumMinorFrames);
-			 //			 fprintf(psuOutStatsFile,"Bits in minor frame: %lu\n",suPcmF1Msg.psuAttributes->ulBitsInMinorFrame);
-			 }		     
+		     //I'm going to try just keeping track of the base time
+		     if ( suPcmF1Msg.llIntPktTime < llBaseCounter )
+			 suPcmF1Msg.llIntPktTime += 0xFFFFFFFFFFFF;
+
+		     llSec  = (suPcmF1Msg.llIntPktTime - llBaseCounter) / 10000000;
+		     llFrac = suPcmF1Msg.llIntPktTime % 10000000;
+		     dRelTime = (double) llSec + ((double)(llFrac)/10000000);
+		     fprintf(psuOutStatsFile,"%.7f",dRelTime);
+
                      // Print out the data
 		     //		     for(Count = 0; Count < suPcmF1Msg.psuAttributes->ulWordsInMinorFrame - 1; Count++)
 		     for(Count = 0; Count < suPcmF1Msg.psuAttributes->ulWordsInMinorFrame; Count++)
@@ -718,7 +728,7 @@ EnI106Status AssembleAttributesFromTMATS(FILE *psuOutStatsFile, SuTmatsInfo * ps
     if((psuTmatsInfo->psuFirstGRecord == NULL) || (psuTmatsInfo->psuFirstRRecord == NULL))
         {
         _snprintf(&szText[TextLen], SizeOfText - TextLen, "%s: %s\n", szModuleText, szI106ErrorStr(I106_INVALID_DATA));
-        fprintf(psuOutStatsFile, szText);
+        fprintf(psuOutStatsFile, "%s", szText);
         return(I106_INVALID_DATA);
         }
         
@@ -745,7 +755,7 @@ EnI106Status AssembleAttributesFromTMATS(FILE *psuOutStatsFile, SuTmatsInfo * ps
                 if((apsuChanInfo[iTrackNumber] = (SuChanInfo *)calloc(1, sizeof(SuChanInfo))) == NULL)
                     {
                     _snprintf(&szText[TextLen], SizeOfText - TextLen, "%s: %s\n", szModuleText, szI106ErrorStr(I106_BUFFER_TOO_SMALL));
-                    fprintf(psuOutStatsFile, szText);
+                    fprintf(psuOutStatsFile, "%s", szText);
                     FreeChanInfoTable(apsuChanInfo, MaxSuChanInfo);
                     return(I106_BUFFER_TOO_SMALL);
                     }
@@ -761,7 +771,7 @@ EnI106Status AssembleAttributesFromTMATS(FILE *psuOutStatsFile, SuTmatsInfo * ps
                     if((apsuChanInfo[iTrackNumber]->psuAttributes = calloc(1, sizeof(SuPcmF1_Attributes))) == NULL)
                         {
                         _snprintf(&szText[TextLen], SizeOfText - TextLen, "%s: %s\n", szModuleText, szI106ErrorStr(I106_BUFFER_TOO_SMALL));
-                        fprintf(psuOutStatsFile, szText);
+                        fprintf(psuOutStatsFile, "%s", szText);
                         FreeChanInfoTable(apsuChanInfo, MaxSuChanInfo);
                         return(I106_BUFFER_TOO_SMALL);
                         }

@@ -1,0 +1,5 @@
+#No dumps
+*.dmp*
+
+#No data dirs
+idmppcm--notes_on_17-DualB_take2_ch10

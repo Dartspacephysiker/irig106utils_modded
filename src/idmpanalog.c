@@ -574,7 +574,7 @@ EnI106Status AssembleAttributesFromTMATS(FILE *psuOutFile, SuTmatsInfo * psuTmat
     if((psuTmatsInfo->psuFirstGRecord == NULL) || (psuTmatsInfo->psuFirstRRecord == NULL))
         {
         _snprintf(&szText[TextLen], SizeOfText - TextLen, "%s: %s\n", szModuleText, szI106ErrorStr(I106_INVALID_DATA));
-        fprintf(psuOutFile, szText);
+        fprintf(psuOutFile, "%s", szText);
         return(I106_INVALID_DATA);
         }
         
@@ -601,7 +601,7 @@ EnI106Status AssembleAttributesFromTMATS(FILE *psuOutFile, SuTmatsInfo * psuTmat
                 if((apsuChanInfo[iTrackNumber] = (SuChanInfo *)calloc(1, sizeof(SuChanInfo))) == NULL)
                     {
                     _snprintf(&szText[TextLen], SizeOfText - TextLen, "%s: %s\n", szModuleText, szI106ErrorStr(I106_BUFFER_TOO_SMALL));
-                    fprintf(psuOutFile, szText);
+                    fprintf(psuOutFile, "%s", szText);
                     FreeChanInfoTable(apsuChanInfo, MaxSuChanInfo);
                     return(I106_BUFFER_TOO_SMALL);
                     }
@@ -618,7 +618,7 @@ EnI106Status AssembleAttributesFromTMATS(FILE *psuOutFile, SuTmatsInfo * psuTmat
                     if((apsuChanInfo[iTrackNumber]->psuAttributes = calloc(1, sizeof(SuAnalogF1_Attributes))) == NULL)
                         {
                         _snprintf(&szText[TextLen], SizeOfText - TextLen, "%s: %s\n", szModuleText, szI106ErrorStr(I106_BUFFER_TOO_SMALL));
-                        fprintf(psuOutFile, szText);
+                        fprintf(psuOutFile, "%s", szText);
                         FreeChanInfoTable(apsuChanInfo, MaxSuChanInfo);
                         return(I106_BUFFER_TOO_SMALL);
                         }

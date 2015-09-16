@@ -1,0 +1,194 @@
+2015/09/09
+Spencer Hatch
+
+*************************************
+**NOTE that SuIrig106Time_S has a member ulFrac—does it go unused?
+
+typedef PUBLIC struct SuIrig106Time_S
+    {
+    uint32_t        ulSecs;     // This is a time_t
+    uint32_t        ulFrac;     // LSB = 100ns
+    EnI106DateFmt   enFmt;      // Day or DMY format
+    } SuIrig106Time;
+
+*************************************
+**1. Here's how it happens in i106_decode_pcmf1.c right after we pick up a minor frame:
+
+// Compute the intrapacket time of the start sync bit position in the current buffer
+                    int64_t llBitPosition = (int64_t)psuAttributes->ulBitPosition - (int64_t)psuAttributes->ulBitsInMinorFrame /*- (int64_t)psuAttributes->ulMinorFrameSyncPatLen*/;
+
+                    double dOffsetIntPktTime = (double)llBitPosition * psuAttributes->dDelta100NanoSeconds;   
+
+                    psuMsg->llIntPktTime = psuMsg->llBaseIntPktTime + (int64_t)dOffsetIntPktTime; // Relative time, omit rounding
+
+*************************************
+**2. Here's how string stuff happens in idmppcm:
+
+                     enI106_RelInt2IrigTime(m_iI106Handle, suPcmF1Msg.llIntPktTime, &suTime);
+//                   szTime = IrigTime2StringF(&suTime, -1);
+                     szTime = IrigTime2String(&suTime);
+                     fprintf(psuOutStatsFile,"%s ", szTime);
+
+
+If I require idmppcm to use suPcmF1Msg.llBaseIntPktTime, I get 56 copies of
+PCMIN-6: 274:21:11:26.374 
+then 55 copies of 
+PCMIN-6: 243:14:58:06.380
+then 54 copies of
+PCMIN-6: 214:08:44:46.387 
+
+
+***********************
+2015/09/10
+
+So what exactly is suPcmF1Msg.llBaseIntPktTime?
+
+*From Chapter 10*
+Packet Header
+The length of the packet header is fixed at 24 bytes (192 bits). The packet header is
+mandatory and shall consist of ten fields, positioned contiguously as shown in Table 10-8 and
+defined below.
+
+******************************
+*From i106_decode_pcmf1.c:138, in enI106_Decode_FirstPcmF1*
+    // Save the time from the packet header
+    vTimeArray2LLInt(psuHeader->aubyRefTime, &(psuMsg->llBaseIntPktTime));
+
+-->So we take the reference time from the Ch10 header and transfer it to psuMsg->llBaseIntPktTime
+
+**********************
+*From i106_time.c:254*
+// Create a 64 bit int relative time from 6 byte array value
+
+void I106_CALL_DECL 
+    vTimeArray2LLInt(uint8_t   abyRelTime[],
+                     int64_t * pllRelTime)
+    {
+    *pllRelTime = 0L;
+    memcpy((char *)pllRelTime, (char *)abyRelTime, 6);
+    return;
+    }
+
+-->Verification that the copy is good:
+(gdb) x/6xb pllRelTime
+0x7ffffff7cc50:	0x5f	0x9f	0x13	0x8e	0x5d	0x00
+(gdb) x/6xb abyRelTime
+0x7fffffffcd00:	0x5f	0x9f	0x13	0x8e	0x5d	0x00
+
+Back in idmppcm, pllRelTime ultimately results in this:
+(gdb) printf "%s\n",szTime
+061:06:43:10.251
+
+I can already tell this is bogus. Check this out:
+
+*Using calculated intra-packet time
+(gdb) p enI106_RelInt2IrigTime(m_iI106Handle, suPcmF1Msg.llIntPktTime, &suTime)
+$4 = I106_OK
+(gdb) p IrigTime2String(&suTime)
+$5 = 0x6161a0 <szTime.3445> "190:21:43:26.251"
+(gdb) printf "%s\n",szTime
+190:21:43:26.251
+
+*Using base time from ch10 header:
+(gdb) p enI106_RelInt2IrigTime(m_iI106Handle, suPcmF1Msg.llBaseIntPktTime, &suTime)
+$6 = I106_OK
+(gdb) p IrigTime2String(&suTime)
+$7 = 0x6161a0 <szTime.3445> "061:06:43:10.251"
+
+*The reason they are BOTH bogus is that idmptime provides consistent time messages that look like this:
+1   401813095789 312:18:52:46 External/Locked   IRIG-B        Not Leap Year
+
+**
+*When I run idmptime like this: ./idmptime Andoya_cals/17-DualB_take2.ch10 junktstamp.dmptime
+-->And set this breakpoint: break idmptime:337
+-->The first llRelTime I obtain is 401813095789, which is what you see above
+--
+-->THEN, when I run idmppcm like this: ./idmppcm Andoya_cals/17-DualB_take2.ch10 junktstamp.txt -d junktstamp.dmppcm -c 6 -E 17-DualB_take2.TMATS
+-->And set this breakpoint: break i106_decode_pcmf1.c:139
+-->The *pllRelTime I get is 401815609183
+--
+--> Now check this out:
+401815609183-401813095789
+2513394/10000000
+.25133940000000000000
+That's a quarter of a second later, you see. Now that's sensible! So what on earth happens? Now I get out of enI106_Decode_First_PcmF1, and I get the following rigmarole:
+
+(gdb) p suPcmF1Msg.llBaseIntPktTime
+$20 = 401815609183   <----Matches *pllRelTime from above, which it should.
+(gdb) p suPcmF1Msg.llIntPktTime
+$21 = 401815609304   <----Sensible, because it's only a few thousandths of a second later
+
+A few lines later, when we get to enI106_RelInt2IrigTime(intiI106Ch10Handle,int64_t llRelTime,SuIrig106Time * psuTime), sup:
+(gdb) p m_asuTimeRef[iI106Ch10Handle].uRelTime
+$23 = 401813095789
+
+Everything looks OK within enI106_RelInt2IrigTime! I agree with every calculation I've seen so far!
+
+(gdb) p psuTime->enFmt
+$33 = I106_DATEFMT_DAY
+
+
+**************************************
+* Tracking down where it all happens *
+**************************************
+
+**
+*All right, idmppcm calls enI106_RelInt2IrigTime(m_iI106Handle, suPcmF1Msg.llBaseIntPktTime, &suTime);
+Once that happens, we're doing this stuff (from i106_time.c:132):
+
+EnI106Status I106_CALL_DECL 
+    enI106_RelInt2IrigTime(int               iI106Ch10Handle,
+                           int64_t           llRelTime,
+                           SuIrig106Time   * psuTime)
+    {
+    int64_t         uTimeDiff;
+    int64_t         lFracDiff;
+    int64_t         lSecDiff;
+
+    int64_t         lSec;
+    int64_t         lFrac;
+
+
+    // Figure out the relative time difference
+    uTimeDiff = llRelTime - m_asuTimeRef[iI106Ch10Handle].uRelTime;
+    lSecDiff  = uTimeDiff / 10000000;
+    lFracDiff = uTimeDiff % 10000000;
+
+**
+*What is m_asuTimeRef[iI106Ch10Handle].uRelTime?
+-->Don't know, but it gets set (perhaps among other places?) right here (i106_time.c:91, enI106_SetRelTime):
+    // Save the relative (i.e. the 10MHz counter) value
+    m_asuTimeRef[iI106Ch10Handle].uRelTime          = 0;
+    memcpy((char *)&(m_asuTimeRef[iI106Ch10Handle].uRelTime), 
+           (char *)&abyRelTime[0], 6);
+
+    return I106_OK;
+    }
+
+**
+*What is the 10MHz counter referenced above? From 10-29:
+"Relative Time Counter. These 6 bytes contain a value representing the 10-MHz RTC.
+This is a free-running 10-MHz binary counter represented by 48 bits that are common to
+all data channels. The counter shall be derived from a 10-MHz internal crystal oscillator
+and shall remain free-running during each recording."
+
+**
+*Note, each time we get a time message in idmppcm, we set the relative time (idmppcm:475):
+                enStatus = enI106Ch10ReadData(m_iI106Handle, ulBuffSize, pvBuff);
+                enI106_Decode_TimeF1(&suI106Hdr, pvBuff, &suTime);
+                enI106_SetRelTime(m_iI106Handle, &suTime, suI106Hdr.aubyRefTime); <--Especially here, check it out
+
+-->within enI106_SetRelTime, we use suTime to set m_asuTimeRef[iI106Ch10Handle].suIrigTime.ulSecs (i106_time.c:79):
+// Update the current reference time value
+EnI106Status I106_CALL_DECL 
+    enI106_SetRelTime(int              iI106Ch10Handle,
+                      SuIrig106Time  * psuTime,
+                      uint8_t          abyRelTime[])
+    {
+
+    // Save the absolute time value
+    m_asuTimeRef[iI106Ch10Handle].suIrigTime.ulSecs = psuTime->ulSecs;
+    m_asuTimeRef[iI106Ch10Handle].suIrigTime.ulFrac = psuTime->ulFrac;
+    m_asuTimeRef[iI106Ch10Handle].suIrigTime.enFmt  = psuTime->enFmt;
+
+
